@@ -8,6 +8,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -248,16 +249,32 @@ public class TownService {
     }
 
     /**
-     * Build a weight -> role name mapping from the town's role list.
+     * Build a weight -> role name mapping.
+     * Tries reflection to access HuskTowns internal Roles config,
+     * falls back to default mapping (3=Mayor, 2=Trustee, 1=Resident).
      */
     private Map<Integer, String> buildRoleNameMap(Town town) {
         Map<Integer, String> map = new HashMap<>();
         try {
-            for (Role role : town.getRoles()) {
-                map.put(role.getWeight(), role.getName());
+            // Try to access HuskTowns internal plugin via reflection
+            Plugin huskTownsPlugin = Bukkit.getPluginManager().getPlugin("HuskTowns");
+            if (huskTownsPlugin != null) {
+                Method getRolesConfig = huskTownsPlugin.getClass().getMethod("getRoles");
+                Object rolesConfig = getRolesConfig.invoke(huskTownsPlugin);
+                Method getRolesList = rolesConfig.getClass().getMethod("getRoles");
+                @SuppressWarnings("unchecked")
+                List<Role> roles = (List<Role>) getRolesList.invoke(rolesConfig);
+                for (Role role : roles) {
+                    map.put(role.getWeight(), role.getName());
+                }
             }
         } catch (Exception ignored) {
-            // Fallback if API doesn't support getRoles
+            // Fallback to default HuskTowns role mapping
+        }
+        if (map.isEmpty()) {
+            map.put(3, "Mayor");
+            map.put(2, "Trustee");
+            map.put(1, "Resident");
         }
         return map;
     }
