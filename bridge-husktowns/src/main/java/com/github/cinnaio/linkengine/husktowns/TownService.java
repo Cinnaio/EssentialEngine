@@ -51,11 +51,13 @@ public class TownService {
         if (townOpt.isEmpty()) return null;
 
         Town town = townOpt.get();
+        Map<Integer, String> roleNames = buildRoleNameMap(town);
         List<Map<String, Object>> members = new ArrayList<>();
         for (Map.Entry<UUID, Integer> entry : town.getMembers().entrySet()) {
             Map<String, Object> member = new HashMap<>();
             member.put("uuid", entry.getKey().toString());
             member.put("roleWeight", entry.getValue());
+            member.put("role", roleNames.getOrDefault(entry.getValue(), "Member"));
             Player player = Bukkit.getPlayer(entry.getKey());
             member.put("name", player != null ? player.getName() : entry.getKey().toString());
             member.put("online", player != null);
@@ -227,16 +229,36 @@ public class TownService {
         map.put("level", town.getLevel());
         map.put("money", town.getMoney());
 
+        // Build role weight -> name lookup
+        Map<Integer, String> roleNames = buildRoleNameMap(town);
+
         List<Map<String, Object>> members = new ArrayList<>();
         for (Map.Entry<UUID, Integer> entry : town.getMembers().entrySet()) {
             Map<String, Object> m = new HashMap<>();
             m.put("uuid", entry.getKey().toString());
             m.put("roleWeight", entry.getValue());
+            m.put("role", roleNames.getOrDefault(entry.getValue(), "Member"));
             Player p = Bukkit.getPlayer(entry.getKey());
             m.put("name", p != null ? p.getName() : entry.getKey().toString());
+            m.put("online", p != null);
             members.add(m);
         }
         map.put("members", members);
+        return map;
+    }
+
+    /**
+     * Build a weight -> role name mapping from the town's role list.
+     */
+    private Map<Integer, String> buildRoleNameMap(Town town) {
+        Map<Integer, String> map = new HashMap<>();
+        try {
+            for (Role role : town.getRoles()) {
+                map.put(role.getWeight(), role.getName());
+            }
+        } catch (Exception ignored) {
+            // Fallback if API doesn't support getRoles
+        }
         return map;
     }
 

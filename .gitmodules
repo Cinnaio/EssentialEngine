@@ -1,0 +1,3 @@
+[submodule "astrbot"]
+	path = astrbot
+	url = git@github.com:Cinnaio/LinkEngine-Astrbot.git
