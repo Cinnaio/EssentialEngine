@@ -1,0 +1,167 @@
+name: EssentialEngine
+version: '${version}'
+main: com.github.cinnaio.essentialengine.EssentialEngine
+api-version: '1.21'
+folia-supported: true
+description: 模块化服务器基础功能插件 —— 传送、玩家指令、聊天、管理、经济，并内置可选的 REST API 与 HuskTowns 对接
+authors:
+  - Cinnaio
+website: https://github.com/Cinnaio/EssentialEngine
+# softdepend 保证 Vault 在本插件之前被加载，这样 onLoad 阶段就能拿到 Vault 的类。
+# 经济服务本身在 onLoad 里注册（早于所有插件的 onEnable），所以不需要 load: STARTUP，
+# 也不需要维护一份 loadbefore 名单。
+softdepend:
+  - HuskTowns
+  - Vault
+
+# 注意：本插件的命令全部在模块启用时动态注册，因此这里不需要声明 commands。
+# 关闭某个模块后，它的命令会真正从服务端命令表里消失。
+permissions:
+  essentialengine.admin:
+    description: 使用 /ee 管理命令
+    default: op
+  essentialengine.command.home:
+    default: true
+  essentialengine.command.sethome:
+    default: true
+  essentialengine.command.delhome:
+    default: true
+  essentialengine.command.homes:
+    default: true
+  essentialengine.command.warp:
+    default: true
+  essentialengine.command.warps:
+    default: true
+  essentialengine.command.setwarp:
+    default: op
+  essentialengine.command.delwarp:
+    default: op
+  essentialengine.command.spawn:
+    default: true
+  essentialengine.command.setspawn:
+    default: op
+  essentialengine.command.tpa:
+    default: true
+  essentialengine.command.tpahere:
+    default: true
+  essentialengine.command.tpaccept:
+    default: true
+  essentialengine.command.tpdeny:
+    default: true
+  essentialengine.command.tpacancel:
+    default: true
+  essentialengine.command.back:
+    default: true
+  essentialengine.command.rtp:
+    default: true
+  essentialengine.command.tp:
+    default: op
+  essentialengine.command.tphere:
+    default: op
+  essentialengine.command.heal:
+    default: op
+  essentialengine.command.feed:
+    default: op
+  essentialengine.command.fly:
+    default: op
+  essentialengine.command.god:
+    default: op
+  essentialengine.command.speed:
+    default: op
+  essentialengine.command.gamemode:
+    default: op
+  essentialengine.command.repair:
+    default: op
+  essentialengine.command.hat:
+    default: op
+  essentialengine.command.workbench:
+    default: true
+  essentialengine.command.enderchest:
+    default: true
+  essentialengine.command.top:
+    default: true
+  essentialengine.command.suicide:
+    default: true
+  essentialengine.command.near:
+    default: true
+  essentialengine.command.ping:
+    default: true
+  essentialengine.command.playtime:
+    default: true
+  essentialengine.command.msg:
+    default: true
+  essentialengine.command.reply:
+    default: true
+  essentialengine.command.msgtoggle:
+    default: true
+  essentialengine.command.ignore:
+    default: true
+  essentialengine.command.mail:
+    default: true
+  essentialengine.command.me:
+    default: true
+  essentialengine.command.afk:
+    default: true
+  essentialengine.command.nick:
+    default: op
+  essentialengine.command.socialspy:
+    default: op
+  essentialengine.command.broadcast:
+    default: op
+  essentialengine.command.kick:
+    default: op
+  essentialengine.command.ban:
+    default: op
+  essentialengine.command.tempban:
+    default: op
+  essentialengine.command.unban:
+    default: op
+  essentialengine.command.mute:
+    default: op
+  essentialengine.command.tempmute:
+    default: op
+  essentialengine.command.unmute:
+    default: op
+  essentialengine.command.vanish:
+    default: op
+  essentialengine.command.invsee:
+    default: op
+  essentialengine.command.clearinventory:
+    default: op
+  essentialengine.command.seen:
+    default: op
+  essentialengine.command.whois:
+    default: op
+  essentialengine.command.balance:
+    default: true
+  essentialengine.command.pay:
+    default: true
+  essentialengine.command.baltop:
+    default: true
+  essentialengine.command.kit:
+    default: true
+  essentialengine.command.eco:
+    default: op
+  essentialengine.command.town:
+    default: true
+  essentialengine.socialspy:
+    description: 监听他人私聊
+    default: op
+  essentialengine.vanish.see:
+    description: 能看见隐身的玩家
+    default: op
+  essentialengine.chat.color:
+    description: 在聊天与私聊中使用颜色代码
+    default: op
+  essentialengine.teleport.bypass.warmup:
+    description: 免除传送吟唱
+    default: op
+  essentialengine.teleport.bypass.cooldown:
+    description: 免除传送冷却
+    default: op
+  essentialengine.ban.exempt:
+    description: 免疫封禁
+    default: false
+  essentialengine.kick.exempt:
+    description: 免疫踢出
+    default: false

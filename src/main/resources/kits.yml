@@ -1,0 +1,32 @@
+# ============================================================
+#  套装配置
+#
+#  两种写法都支持：
+#  1) 简写字符串： "STONE_SWORD 1 name:&a新手剑"
+#     （name 里的空格用下划线代替，例如 name:&a我的_宝剑）
+#  2) 直接在游戏里用 /kit create <名称> [冷却秒数] 把当前背包存成套装，
+#     这种方式会保留附魔、自定义名称、NBT 等全部信息（推荐）
+#
+#  cooldown：冷却秒数。0 = 无冷却，-1 = 每人只能领一次
+#  permission：留空则自动使用 essentialengine.kit.<套装名>
+# ============================================================
+
+kits:
+
+  starter:
+    cooldown: -1
+    permission: ''
+    items:
+      - "STONE_SWORD 1 name:&a新手剑"
+      - "STONE_PICKAXE 1"
+      - "STONE_AXE 1"
+      - "BREAD 16"
+      - "TORCH 32"
+
+  daily:
+    cooldown: 86400
+    permission: ''
+    items:
+      - "GOLDEN_APPLE 1"
+      - "COOKED_BEEF 32"
+      - "EXPERIENCE_BOTTLE 8"

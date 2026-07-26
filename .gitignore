@@ -20,3 +20,9 @@ target/
 
 # Logs
 *.log
+
+# 本地测试服务端
+run/
+
+# 迁移到 EssentialEngine 时留下的旧结构，确认无误后可整个删掉
+_to_delete/

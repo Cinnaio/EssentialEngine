@@ -1,0 +1,172 @@
+# ============================================================
+#  EssentialEngine 配置文件
+#  模块化服务器基础功能插件（Paper / Folia 1.21.4+）
+#
+#  每个模块都可以单独开关；关闭后它的命令会从服务端命令表中移除，
+#  不会和其它插件抢占命令名。
+# ============================================================
+
+# 语言文件：对应 messages_<语言>.yml，内置 zh_CN 与 en_US
+language: zh_CN
+
+# 打开后会输出更多调试日志（例如自动保存了多少份数据）
+debug: false
+
+# ------------------------------------------------------------
+#  存储后端
+# ------------------------------------------------------------
+storage:
+  # yaml   —— 每个玩家一个 yml 文件，零外部依赖，适合中小型服务器（推荐）
+  # sqlite —— 单文件数据库，玩家量大时更快
+  # mysql  —— 多服共享同一份玩家数据（余额、家、封禁都会同步）
+  type: yaml
+
+  # 在线玩家数据的自动保存间隔（分钟）
+  auto-save-minutes: 5
+
+  # SQLite / MySQL 驱动会在第一次使用时自动下载到 plugins/EssentialEngine/libs/。
+  # 国内服务器如果下载慢，可以换成镜像，例如：
+  #   https://maven.aliyun.com/repository/public
+  maven-repository: "https://repo1.maven.org/maven2"
+
+  sqlite:
+    file: database.db
+    table-prefix: "ee_"
+    driver-version: "3.47.1.0"
+
+  mysql:
+    host: 127.0.0.1
+    port: 3306
+    database: minecraft
+    username: root
+    password: ""
+    parameters: "useSSL=false&characterEncoding=utf8&serverTimezone=UTC"
+    table-prefix: "ee_"
+    driver-version: "9.1.0"
+
+# ------------------------------------------------------------
+#  命令控制
+# ------------------------------------------------------------
+commands:
+  # 不想让本插件接管的命令写在这里，插件就完全不会注册它
+  # 例如已经装了别的传送插件：disabled: ["tp", "tphere"]
+  disabled: []
+
+  # 给命令追加自定义别名（原有别名仍然有效）
+  aliases:
+    home: []
+    spawn: []
+    balance: []
+
+# ------------------------------------------------------------
+#  功能模块
+# ------------------------------------------------------------
+modules:
+
+  # 插件自身的管理命令 /ee，建议保持开启
+  core:
+    enabled: true
+
+  # ---------------- 传送 ----------------
+  # /home /sethome /delhome /homes /warp /setwarp /delwarp /warps
+  # /spawn /setspawn /tpa /tpahere /tpaccept /tpdeny /tpacancel /back /tp /tphere /rtp
+  teleport:
+    enabled: true
+    # 传送吟唱秒数，0 表示立即传送；权限 essentialengine.teleport.bypass.warmup 可免除
+    warmup-seconds: 3
+    # 传送冷却秒数；权限 essentialengine.teleport.bypass.cooldown 可免除
+    cooldown-seconds: 5
+    # 吟唱期间移动 / 受伤是否打断
+    cancel-on-move: true
+    cancel-on-damage: true
+    # 默认可设置的家数量；也可以用权限 essentialengine.homes.<数字> 单独提升，
+    # 或 essentialengine.homes.unlimited 解除限制
+    max-homes: 3
+    # 传送请求多少秒后过期
+    request-expire-seconds: 60
+    # 死亡地点是否记入 /back
+    back-on-death: true
+    # 每个地标是否需要单独权限 essentialengine.warp.<地标名>
+    per-warp-permission: false
+    rtp:
+      enabled: true
+      # 留空表示在玩家当前世界随机传送
+      world: ""
+      min-radius: 500
+      max-radius: 5000
+      # 找不到安全落点时的重试次数
+      max-attempts: 8
+
+  # ---------------- 玩家实用指令 ----------------
+  # /heal /feed /fly /god /speed /gamemode(/gms /gmc /gma /gmsp) /repair /hat
+  # /workbench /enderchest /top /suicide /near /ping /playtime
+  player:
+    enabled: true
+    # /near 的默认搜索半径
+    near-radius: 100
+
+  # ---------------- 聊天与消息 ----------------
+  # /msg /reply /msgtoggle /socialspy /ignore /nick /broadcast /me /afk /mail
+  chat:
+    enabled: true
+    # 是否接管聊天格式。默认关闭，避免和 LuckPerms 前缀、其它聊天插件冲突
+    enable-chat-format: false
+    chat-format: "&7{player}&8: &f{message}"
+    private-format-sender: "&7[&f你 &7-> &f{target}&7] &f{message}"
+    private-format-target: "&7[&f{sender} &7-> &f你&7] &f{message}"
+    socialspy-format: "&8[监听] &7{sender} &8-> &7{target}&8: &f{message}"
+    broadcast-format: "&8[&c广播&8] &f{message}"
+    me-format: "&d* {player} &f{message}"
+    # 多少秒无操作自动进入 AFK，0 表示关闭自动 AFK
+    afk-timeout-seconds: 300
+    # AFK 状态变化是否全服提示
+    afk-broadcast: true
+    # 昵称最大长度（不含颜色代码）
+    nick-max-length: 16
+    # 每位玩家的邮箱上限
+    mail-max: 30
+
+  # ---------------- 管理与惩罚 ----------------
+  # /kick /ban /tempban /unban /mute /tempmute /unmute /vanish /invsee
+  # /clearinventory /seen /whois
+  admin:
+    enabled: true
+
+  # ---------------- 经济与套装 ----------------
+  # /balance /pay /eco /baltop /kit
+  economy:
+    enabled: true
+    currency-symbol: "$"
+    currency-name: "金币"
+    # 新玩家首次进服获得的初始资金，0 表示不发放
+    starting-balance: 100.0
+    # 单次转账的最小金额
+    minimum-pay: 0.01
+    # 是否把本插件注册为 Vault 的经济提供者（需要服务器安装 Vault）。
+    # 注册发生在插件的 onLoad 阶段，也就是所有插件 onEnable 之前，
+    # 因此商店 / 职业 / 任务这类插件在启动时一定能查到经济服务。
+    vault-hook: true
+    # Vault 服务优先级：Lowest / Low / Normal / High / Highest。
+    # 服务器上同时装了别的经济插件时，用它决定谁生效；
+    # 想让本插件的经济压过其它插件就改成 Highest。
+    vault-priority: Normal
+
+  # ---------------- HuskTowns 对接 ----------------
+  # 未安装 HuskTowns 时会自动跳过
+  husktowns:
+    enabled: true
+
+  # ---------------- REST API ----------------
+  # 给外部程序（QQ / Discord 机器人、网页后台、监控面板）调用的 HTTP 接口。
+  # 默认关闭；开启前请务必修改 api-key，并尽量只监听 127.0.0.1。
+  webapi:
+    enabled: false
+    # 0.0.0.0 = 所有网卡（公网可访问，风险高）；127.0.0.1 = 只允许本机访问
+    bind-address: "127.0.0.1"
+    port: 8192
+    # 请改成一段足够随机的字符串，调用方需带 Authorization: Bearer <api-key>
+    api-key: "change-me-to-a-random-key"
+    # 是否把每次请求打进控制台日志
+    log-requests: false
+    # 允许通过 /api/server/command 执行的命令白名单，留空表示不限制（不建议）
+    allowed-commands: []
