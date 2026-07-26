@@ -8,7 +8,13 @@
 <style>
 /* ============================================================
    EssentialEngine 管理面板
-   风格：iOS「液态玻璃」—— 极光背景 + 分层磨砂玻璃面板
+   风格：iOS 浅色（设置 / 健康那一套）
+
+   刻意<b>不</b>做「彩虹色斑 + 全屏磨砂」的通用玻璃拟态——那是最套路的做法，
+   而且真正的 iOS 浅色界面根本不长那样：背景是干净的中性分组灰，卡片是纯白，
+   颜色只出现在语义位置（状态、图标），撑起质感的是排版层级和留白。
+   半透明模糊只保留在它本该出现的地方：侧边栏与浮层。
+
    全部资源内联，不引用任何外部 CDN（服务器通常没有外网出口，
    且面板的 CSP 是 default-src 'self'）
    ============================================================ */
@@ -24,31 +30,25 @@
   --danger: #FF3B30;
   --warn: #FF9500;
 
-  --radius-xl: 28px;
-  --radius-lg: 20px;
-  --radius-md: 14px;
-  --radius-sm: 10px;
+  /* iOS systemGroupedBackground 与卡片 */
+  --bg: #F2F2F7;
+  --card: #FFFFFF;
+  --text: #000000;
+  --text-2: rgba(60,60,67,.60);
+  --text-3: rgba(60,60,67,.32);
+  --hairline: rgba(60,60,67,.13);
+  --field: #F2F2F7;
+  --track: rgba(120,120,128,.16);
+  --tint: rgba(0,122,255,.10);
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+
+  --radius-xl: 26px;
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 9px;
 
   /* iOS 的弹性缓动 */
   --spring: cubic-bezier(.32,.72,0,1);
-}
-
-/* ---- 浅色主题 ----
-   刻意不跟随系统深色：整套配色是照着 iOS 浅色模式调的，
-   玻璃的通透感来自「高亮度白 + 顶部高光边 + 带蓝的柔和投影」，
-   换到深色底上这套数值就不成立了。 */
-:root{
-  --bg: #e6eaf2;
-  --text: #10131a;
-  --text-2: rgba(60,60,67,.66);
-  --text-3: rgba(60,60,67,.42);
-  --glass: rgba(255,255,255,.72);
-  --glass-2: rgba(255,255,255,.56);
-  --hairline: rgba(16,24,48,.08);
-  --highlight: rgba(255,255,255,.95);
-  --field: rgba(255,255,255,.88);
-  --track: rgba(120,120,128,.26);
-  --shadow: 0 10px 34px rgba(38,54,102,.13);
 }
 
 *{ box-sizing:border-box; margin:0; padding:0; }
@@ -58,41 +58,47 @@ body{
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   overflow-x: hidden;
-  letter-spacing:-.01em;
 }
 
-/* ---- 极光背景：几团缓慢漂移的色斑，玻璃面板下面透出的就是它 ---- */
-.aurora{ position:fixed; inset:0; z-index:-1; overflow:hidden; }
-.aurora i{
-  position:absolute; display:block; border-radius:50%;
-  filter: blur(90px); opacity:.55; will-change: transform;
+/* 顶部一层极淡的冷色渐变，让大片留白不至于发死；不喧宾夺主 */
+.aurora{
+  position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:
+    radial-gradient(120% 62% at 12% -12%, rgba(0,122,255,.09), transparent 62%),
+    radial-gradient(90% 52% at 92% 2%, rgba(175,82,222,.06), transparent 60%);
 }
-/* 浅色底上要用饱和度够高的粉彩：太淡的话玻璃和背景就分不开了 */
-.aurora i:nth-child(1){ width:52vw; height:52vw; left:-10vw; top:-12vw;
-  background:#6FB1FF; animation: drift1 26s var(--spring) infinite alternate; }
-.aurora i:nth-child(2){ width:44vw; height:44vw; right:-8vw; top:6vh;
-  background:#6FE0A6; animation: drift2 32s var(--spring) infinite alternate; }
-.aurora i:nth-child(3){ width:40vw; height:40vw; left:22vw; bottom:-16vw;
-  background:#C3A2FF; animation: drift3 29s var(--spring) infinite alternate; }
-.aurora i:nth-child(4){ width:30vw; height:30vw; right:16vw; bottom:-6vw;
-  background:#FFC978; opacity:.42; animation: drift1 35s var(--spring) infinite alternate-reverse; }
-@keyframes drift1{ to{ transform:translate3d(12vw,8vh,0) scale(1.18);} }
-@keyframes drift2{ to{ transform:translate3d(-14vw,12vh,0) scale(.86);} }
-@keyframes drift3{ to{ transform:translate3d(10vw,-10vh,0) scale(1.12);} }
-@media (prefers-reduced-motion: reduce){ .aurora i{ animation:none; } }
+.aurora i{ display:none; }
 
-/* ---- 玻璃基类 ---- */
+/* ---- 卡片基类 ----
+   名字沿用 .glass（JS 里在用），但现在是不透明白卡片：
+   iOS 的层次靠的是极轻的投影 + 大圆角，而不是把所有东西都做成毛玻璃 */
 .glass{
-  background: var(--glass);
-  backdrop-filter: blur(30px) saturate(180%);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  background: var(--card);
   border-radius: var(--radius-lg);
-  box-shadow:
-    inset 0 1px 0 0 var(--highlight),
-    inset 0 0 0 1px var(--hairline),
-    var(--shadow);
+  box-shadow: var(--shadow);
 }
+
+/* 真正需要「玻璃」的地方：侧边栏与浮层 */
+.frosted{
+  background: rgba(255,255,255,.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* ---- 图标 ----
+   刻意<b>不</b>用 iOS 设置那种「每项一个彩色圆角块」：全站只有蓝色一个强调色，
+   一排饱和色块会和其它部分打架。这里统一成单色描边图标——默认灰、选中变蓝，
+   和按钮、开关、选中态用的是同一套语言。 */
+.sq{
+  width:22px; height:22px; flex:none;
+  display:grid; place-items:center;
+  color:var(--text-3);
+  transition:color .18s;
+}
+.sq svg{ width:20px; height:20px; }
+svg{ stroke:currentColor; fill:none; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
 
 /* ============================ 登录 ============================ */
 #login{
@@ -105,74 +111,93 @@ body{
 }
 @keyframes rise{ from{ opacity:0; transform:translateY(22px) scale(.97);} }
 .mark{
-  width:60px; height:60px; border-radius:19px; margin:0 auto 20px;
-  background:linear-gradient(150deg,var(--accent),var(--accent-2));
-  display:grid; place-items:center; font-size:29px; font-weight:700; color:#fff;
-  box-shadow:0 10px 26px rgba(10,132,255,.38), inset 0 1px 0 rgba(255,255,255,.4);
+  width:62px; height:62px; border-radius:15px; margin:0 auto 18px;
+  background:var(--accent);
+  display:grid; place-items:center; color:#fff;
+  box-shadow:0 8px 20px rgba(0,122,255,.30);
 }
-.login-card h1{ font-size:23px; font-weight:640; text-align:center; letter-spacing:-.02em; }
-.login-card p{ font-size:13.5px; color:var(--text-2); text-align:center; margin:7px 0 26px; }
+.mark svg{ width:32px; height:32px; }
+.login-card h1{ font-size:24px; font-weight:700; text-align:center; letter-spacing:-.5px; }
+.login-card p{ font-size:14px; color:var(--text-2); text-align:center; margin:5px 0 24px; }
 
 /* ============================ 布局 ============================ */
-#app{ display:none; min-height:100dvh; padding:20px; gap:20px; }
-#app.on{ display:grid; grid-template-columns:236px 1fr; }
-@media (max-width:860px){ #app.on{ grid-template-columns:1fr; } }
+#app{ display:none; min-height:100dvh; }
+#app.on{ display:grid; grid-template-columns:250px 1fr; }
+@media (max-width:900px){ #app.on{ grid-template-columns:1fr; } }
 
-aside{ position:sticky; top:20px; align-self:start; padding:18px 14px; }
-.brand{ display:flex; align-items:center; gap:11px; padding:2px 8px 18px; }
-.brand .mark{ width:34px; height:34px; border-radius:11px; font-size:17px; margin:0; box-shadow:none; }
-.brand b{ font-size:15px; font-weight:620; letter-spacing:-.02em; }
-.brand span{ display:block; font-size:11px; color:var(--text-3); font-weight:450; }
-
-nav{ display:flex; flex-direction:column; gap:3px; }
-@media (max-width:860px){ nav{ flex-direction:row; overflow-x:auto; padding-bottom:4px; } }
-.tab{
-  display:flex; align-items:center; gap:10px; width:100%;
-  padding:10px 12px; border:0; border-radius:var(--radius-md);
-  background:transparent; color:var(--text-2); font:inherit; font-size:14px; font-weight:500;
-  cursor:pointer; text-align:left; white-space:nowrap;
-  transition: background .22s var(--spring), color .22s;
+aside{
+  position:sticky; top:0; align-self:start; height:100dvh; padding:22px 14px;
+  display:flex; flex-direction:column;
+  border-right:1px solid var(--hairline);
 }
-.tab:hover{ background:var(--glass-2); color:var(--text); }
-.tab[aria-selected="true"]{ background:var(--glass-2); color:var(--text); font-weight:590;
-  box-shadow: inset 0 0 0 1px var(--hairline); }
-.tab .ic{ width:20px; text-align:center; font-size:15px; }
+@media (max-width:900px){
+  aside{ position:static; height:auto; border-right:0; border-bottom:1px solid var(--hairline); }
+}
+.brand{ display:flex; align-items:center; gap:10px; padding:2px 10px 22px; }
+.brand .mark{ width:30px; height:30px; border-radius:8px; margin:0; box-shadow:none; }
+.brand .mark svg{ width:17px; height:17px; }
+.brand b{ font-size:15px; font-weight:600; letter-spacing:-.2px; display:block; }
+.brand span{ display:block; font-size:11.5px; color:var(--text-3); }
 
-main{ min-width:0; display:flex; flex-direction:column; gap:18px; }
-.view{ display:none; flex-direction:column; gap:18px; }
-.view.on{ display:flex; animation: fade .45s var(--spring) both; }
-@keyframes fade{ from{ opacity:0; transform:translateY(10px);} }
+nav{ display:flex; flex-direction:column; gap:2px; }
+@media (max-width:900px){ nav{ flex-direction:row; overflow-x:auto; padding-bottom:2px; } }
+.tab{
+  display:flex; align-items:center; gap:11px; width:100%;
+  padding:7px 10px; border:0; border-radius:9px;
+  background:transparent; color:var(--text); font:inherit; font-size:15px; font-weight:400;
+  cursor:pointer; text-align:left; white-space:nowrap;
+  transition: background .18s;
+}
+.tab:hover{ background:rgba(60,60,67,.05); }
+.tab:hover .sq{ color:var(--text-2); }
+.tab[aria-selected="true"]{ background:var(--tint); color:var(--accent); font-weight:590; }
+.tab[aria-selected="true"] .sq{ color:var(--accent); }
 
-.head{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;
-  padding:4px 4px 0; }
-.head h2{ font-size:27px; font-weight:680; letter-spacing:-.03em; }
-.head p{ font-size:13px; color:var(--text-2); margin-top:3px; }
+main{ min-width:0; display:flex; flex-direction:column; gap:20px;
+  padding:34px clamp(20px,4vw,44px) 48px; }
+
+.view{ display:none; flex-direction:column; gap:20px; }
+.view.on{ display:flex; animation: fade .4s var(--spring) both; }
+@keyframes fade{ from{ opacity:0; transform:translateY(8px);} }
+
+/* iOS 的 Large Title：字号大、字重重、字距收紧 */
+.head{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.head h2{ font-size:34px; font-weight:700; letter-spacing:-.9px; line-height:1.1; }
+.head p{ font-size:14px; color:var(--text-2); margin-top:5px; }
+
+/* 分组标题：iOS 分组列表上方那行小灰字 */
+.panel > h3, .grp > header b{
+  font-size:13px; font-weight:600; color:var(--text-2);
+  letter-spacing:.2px;
+}
 
 /* ============================ 组件 ============================ */
 .btn{
-  border:0; border-radius:12px; padding:9px 17px; font:inherit; font-size:14px; font-weight:560;
-  background:var(--glass-2); color:var(--text); cursor:pointer;
-  box-shadow: inset 0 0 0 1px var(--hairline);
-  transition: transform .2s var(--spring), filter .2s, opacity .2s;
+  border:0; border-radius:10px; padding:8px 16px; font:inherit; font-size:15px; font-weight:510;
+  background:rgba(120,120,128,.12); color:var(--accent); cursor:pointer;
+  transition: transform .18s var(--spring), background .18s, opacity .18s;
 }
-.btn:hover{ filter:brightness(1.14); }
-.btn:active{ transform:scale(.955); }
-.btn[disabled]{ opacity:.42; cursor:default; transform:none; }
-.btn.primary{ background:var(--accent); color:#fff; box-shadow:0 5px 16px rgba(10,132,255,.34); }
-.btn.danger{ background:rgba(255,69,58,.16); color:var(--danger); }
-.btn.sm{ padding:6px 12px; font-size:12.5px; border-radius:9px; }
-.btn.wide{ width:100%; padding:13px; font-size:15px; }
+.btn:hover{ background:rgba(120,120,128,.18); }
+.btn:active{ transform:scale(.96); }
+.btn[disabled]{ opacity:.4; cursor:default; transform:none; }
+.btn.primary{ background:var(--accent); color:#fff; }
+.btn.primary:hover{ background:#0069DB; }
+.btn.danger{ background:rgba(255,59,48,.11); color:var(--danger); }
+.btn.danger:hover{ background:rgba(255,59,48,.18); }
+.btn.sm{ padding:5px 12px; font-size:13px; border-radius:8px; }
+.btn.wide{ width:100%; padding:13px; font-size:16px; font-weight:590; }
 
 input,textarea,select{
-  width:100%; font:inherit; font-size:14.5px; color:var(--text);
-  background:var(--field); border:0; border-radius:12px; padding:11px 14px;
-  box-shadow: inset 0 0 0 1px var(--hairline);
-  transition: box-shadow .22s;
+  width:100%; font:inherit; font-size:15px; color:var(--text);
+  background:var(--field); border:0; border-radius:10px; padding:11px 14px;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow .2s, background .2s;
 }
-input:focus,textarea:focus,select:focus{ outline:0;
-  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px rgba(0,122,255,.15); }
-input.bad{ box-shadow: inset 0 0 0 1.5px var(--danger), 0 0 0 4px rgba(255,59,48,.14); }
-textarea{ resize:vertical; min-height:78px; font-family:var(--font-mono); font-size:13px; }
+input:focus,textarea:focus,select:focus{ outline:0; background:#fff;
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px rgba(0,122,255,.13); }
+input.bad{ background:#fff;
+  box-shadow: inset 0 0 0 1.5px var(--danger), 0 0 0 4px rgba(255,59,48,.13); }
+textarea{ resize:vertical; min-height:76px; font-family:var(--font-mono); font-size:13px; }
 ::placeholder{ color:var(--text-3); }
 
 /* ---- 抹掉各家浏览器塞进来的原生控件外观 ----
@@ -205,64 +230,70 @@ input:-webkit-autofill:focus{
 .sw[data-on="true"]::after{ transform:translateX(20px); }
 
 .chip{ display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:100px;
-  font-size:11.5px; font-weight:560; background:var(--glass-2);
-  box-shadow: inset 0 0 0 1px var(--hairline); color:var(--text-2); }
-.chip.good{ color:var(--accent-2); background:rgba(48,209,88,.14); }
-.chip.bad{ color:var(--danger); background:rgba(255,69,58,.14); }
-.chip.warn{ color:var(--warn); background:rgba(255,159,10,.14); }
+  font-size:12px; font-weight:510; background:rgba(120,120,128,.12); color:var(--text-2); }
+.chip.good{ color:#248A3D; background:rgba(52,199,89,.15); }
+.chip.bad{ color:#D70015; background:rgba(255,59,48,.13); }
+.chip.warn{ color:#B25000; background:rgba(255,149,0,.16); }
 
 /* ============================ 概览 ============================ */
-.tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:14px; }
-.tile{ padding:18px 20px; border-radius:var(--radius-lg); }
-.tile .k{ font-size:12px; color:var(--text-2); font-weight:520; }
-.tile .v{ font-size:30px; font-weight:680; letter-spacing:-.035em; margin-top:6px;
-  font-variant-numeric:tabular-nums; }
-.tile .s{ font-size:11.5px; color:var(--text-3); margin-top:2px; }
+.tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(176px,1fr)); gap:14px; }
+.tile{ padding:16px 18px 18px; }
+.tile .k{ font-size:13px; color:var(--text-2); font-weight:400; }
+/* 数字用等宽字形，刷新时不会左右跳动 */
+.tile .v{ font-size:32px; font-weight:640; letter-spacing:-1px; margin-top:8px;
+  font-variant-numeric:tabular-nums; line-height:1.05; }
+.tile .s{ font-size:12px; color:var(--text-3); margin-top:4px; }
 
-.panel{ padding:20px 22px; border-radius:var(--radius-lg); }
-.panel > h3{ font-size:15px; font-weight:620; margin-bottom:14px; letter-spacing:-.01em; }
+.panel{ padding:18px 20px 20px; }
+.panel > h3{ margin-bottom:14px; }
 
-.mods{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+.mods{ display:grid; grid-template-columns:repeat(auto-fill,minmax(196px,1fr)); gap:9px; }
 .mod{ display:flex; align-items:center; justify-content:space-between; gap:10px;
-  padding:12px 14px; border-radius:var(--radius-md); background:var(--glass-2);
-  box-shadow: inset 0 0 0 1px var(--hairline); }
+  padding:11px 13px; border-radius:11px; background:var(--field); }
 .mod > div{ min-width:0; }
-.mod b{ font-size:13.5px; font-weight:560; display:block;
+.mod b{ font-size:14px; font-weight:500; display:block;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.mod small{ font-size:11px; color:var(--text-3); font-family:var(--font-mono); }
+.mod small{ font-size:11.5px; color:var(--text-3); font-family:var(--font-mono); }
 .mod .chip{ flex:none; white-space:nowrap; }
 
 /* ============================ 配置 ============================ */
-.grp{ padding:0; border-radius:var(--radius-lg); overflow:hidden; }
-.grp > header{ padding:16px 20px 12px; }
-.grp > header b{ font-size:13px; font-weight:640; font-family:var(--font-mono); color:var(--accent); }
-.grp > header p{ font-size:12px; color:var(--text-2); margin-top:6px; white-space:pre-line; line-height:1.55; }
-.row{ display:flex; align-items:center; gap:16px; padding:13px 20px;
-  box-shadow: inset 0 1px 0 var(--hairline); }
+/* iOS 分组列表：标题在卡片外面，分隔线从左侧内缩 */
+.grp{ padding:0; overflow:hidden; }
+.grp > header{ padding:16px 18px 10px; }
+.grp > header b{ font-family:var(--font-mono); color:var(--text-2); }
+.grp > header p{ font-size:12.5px; color:var(--text-3); margin-top:6px;
+  white-space:pre-line; line-height:1.5; }
+.row{ display:flex; align-items:center; gap:16px; padding:11px 18px; position:relative; }
+.row::before{ content:""; position:absolute; top:0; left:18px; right:0;
+  height:1px; background:var(--hairline); }
+.row:first-of-type::before{ display:none; }
 .row .lbl{ flex:1; min-width:0; }
-.row .lbl b{ font-size:14px; font-weight:530; display:block; }
-.row .lbl p{ font-size:11.5px; color:var(--text-3); margin-top:3px; white-space:pre-line; line-height:1.5; }
-.row .ctl{ flex:none; width:min(280px,46%); }
+.row .lbl b{ font-size:15px; font-weight:400; display:block; }
+.row .lbl p{ font-size:12px; color:var(--text-3); margin-top:2px;
+  white-space:pre-line; line-height:1.45; }
+.row .ctl{ flex:none; width:min(260px,44%); }
 .row.stack{ flex-direction:column; align-items:stretch; gap:9px; }
 .row.stack .ctl{ width:100%; }
 
 /* 底部悬浮保存条 */
 .savebar{
-  position:sticky; bottom:0; z-index:5; margin-top:4px;
+  position:sticky; bottom:16px; z-index:5; margin-top:6px;
   display:flex; align-items:center; justify-content:space-between; gap:14px;
-  padding:13px 18px; border-radius:var(--radius-lg);
-  transform:translateY(140%); transition:transform .45s var(--spring);
+  padding:11px 12px 11px 18px; border-radius:14px;
+  background:rgba(255,255,255,.82);
+  backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
+  box-shadow:0 6px 24px rgba(0,0,0,.12);
+  transform:translateY(160%); transition:transform .42s var(--spring);
 }
 .savebar.on{ transform:none; }
-.savebar b{ font-size:13.5px; font-weight:560; }
+.savebar b{ font-size:14px; font-weight:510; }
 
 /* ============================ 玩家 ============================ */
-.plist{ display:grid; gap:12px; }
-.pcard{ padding:16px 18px; border-radius:var(--radius-lg); display:flex; align-items:center;
-  gap:16px; flex-wrap:wrap; }
+.plist{ display:grid; gap:11px; }
+.pcard{ padding:15px 18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
 .pcard .who{ flex:1 1 260px; min-width:0; }
-.pcard .who b{ font-size:16px; font-weight:620; letter-spacing:-.02em; }
-.pcard .meta{ display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
+.pcard .who b{ font-size:17px; font-weight:590; letter-spacing:-.3px; }
+.pcard .meta{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
 .pcard .acts{ display:flex; gap:7px; flex-wrap:wrap; }
 
 /* ============================ 经济 ============================ */
@@ -295,14 +326,17 @@ input:-webkit-autofill:focus{
 /* ============================ 杂项 ============================ */
 .toast{
   position:fixed; left:50%; bottom:34px; translate:-50% 0; z-index:50;
-  padding:12px 22px; border-radius:100px; font-size:14px; font-weight:530;
+  padding:11px 22px; border-radius:100px; font-size:14.5px; font-weight:510;
+  background:rgba(28,28,30,.90); color:#fff;
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  box-shadow:0 8px 30px rgba(0,0,0,.22);
   opacity:0; transform:translateY(18px) scale(.94); pointer-events:none;
   transition:opacity .35s var(--spring), transform .35s var(--spring);
 }
 .toast.on{ opacity:1; transform:none; }
-.toast.bad{ color:var(--danger); }
+.toast.bad{ color:#FF6961; }
 
-.empty{ text-align:center; padding:44px 20px; color:var(--text-3); font-size:14px; }
+.empty{ text-align:center; padding:42px 20px; color:var(--text-3); font-size:15px; }
 .note{ font-size:12.5px; color:var(--text-2); line-height:1.65; }
 .note code{ font-family:var(--font-mono); font-size:11.5px; background:var(--field);
   padding:1.5px 6px; border-radius:6px; }
@@ -311,11 +345,13 @@ input:-webkit-autofill:focus{
    浏览器原生弹窗长得和系统一样，样式完全不可控，
    这里按 iOS 警告框的形态自己实现一套。 */
 #dlg{ position:fixed; inset:0; z-index:90; display:none; place-items:center; padding:24px;
-  background:rgba(118,130,158,.26); backdrop-filter:blur(10px);
-  -webkit-backdrop-filter:blur(10px); }
+  background:rgba(0,0,0,.22); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); }
 #dlg.on{ display:grid; }
-.dlg-card{ width:min(332px,100%); border-radius:24px; padding:24px 22px 0; text-align:center;
-  overflow:hidden; animation:pop .38s var(--spring) both; }
+.dlg-card{ width:min(300px,100%); border-radius:14px; padding:22px 20px 0; text-align:center;
+  overflow:hidden; animation:pop .38s var(--spring) both;
+  background:rgba(255,255,255,.94);
+  backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
+  box-shadow:0 12px 48px rgba(0,0,0,.22); }
 @keyframes pop{ from{ opacity:0; transform:scale(.86);} }
 .dlg-card h4{ font-size:17px; font-weight:640; letter-spacing:-.02em; }
 .dlg-card p{ font-size:13px; color:var(--text-2); margin-top:7px; line-height:1.55; }
@@ -323,12 +359,12 @@ input:-webkit-autofill:focus{
 .dlg-acts{ display:flex; margin:20px -22px 0; box-shadow: inset 0 1px 0 var(--hairline); }
 .dlg-acts button{ flex:1; border:0; background:transparent; padding:14px 8px; cursor:pointer;
   font:inherit; font-size:16px; color:var(--accent); transition:background .2s; }
-.dlg-acts button:hover{ background:var(--glass-2); }
+.dlg-acts button:hover{ background:rgba(60,60,67,.06); }
 .dlg-acts button+button{ box-shadow: inset 1px 0 0 var(--hairline); font-weight:620; }
 .dlg-acts button.danger{ color:var(--danger); }
 
 #veil{ position:fixed; inset:0; z-index:80; display:none; place-items:center;
-  background:rgba(230,234,242,.62); backdrop-filter:blur(12px);
+  background:rgba(242,242,247,.78); backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px); }
 #veil.on{ display:grid; }
 #veil div{ text-align:center; font-size:15px; font-weight:530; }
@@ -351,7 +387,9 @@ input:-webkit-autofill:focus{
 <section id="login">
   <!-- novalidate：关掉浏览器自带的「请填写此字段」气泡，改用页面内提示 -->
   <form class="login-card glass" id="loginForm" novalidate>
-    <div class="mark">E</div>
+    <div class="mark">
+      <svg viewBox="0 0 24 24"><path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7z"/><path d="M12 12 20.5 7M12 12v9.4M12 12 3.5 7"/></svg>
+    </div>
     <h1>EssentialEngine</h1>
     <p>管理面板</p>
     <input type="password" id="pw" placeholder="面板密码" autocomplete="current-password">
@@ -362,18 +400,24 @@ input:-webkit-autofill:focus{
 
 <!-- ============================ 主体 ============================ -->
 <div id="app">
-  <aside class="glass">
+  <aside class="frosted">
     <div class="brand">
-      <div class="mark">E</div>
+      <div class="mark">
+        <svg viewBox="0 0 24 24"><path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7z"/><path d="M12 12 20.5 7M12 12v9.4M12 12 3.5 7"/></svg>
+      </div>
       <div><b>EssentialEngine</b><span id="verTag">—</span></div>
     </div>
     <nav role="tablist">
-      <button class="tab" role="tab" data-view="overview" aria-selected="true"><span class="ic">◎</span>概览</button>
-      <button class="tab" role="tab" data-view="config"   aria-selected="false"><span class="ic">⚙</span>配置</button>
-      <button class="tab" role="tab" data-view="players"  aria-selected="false"><span class="ic">◍</span>玩家</button>
-      <button class="tab" role="tab" data-view="economy"  aria-selected="false"><span class="ic">◈</span>经济</button>
+      <button class="tab" role="tab" data-view="overview" aria-selected="true">
+        <span class="sq"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="2.2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2.2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2.2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.2"/></svg></span>概览</button>
+      <button class="tab" role="tab" data-view="config" aria-selected="false">
+        <span class="sq"><svg viewBox="0 0 24 24"><path d="M3 7h9M17 7h4M3 17h4M12 17h9"/><circle cx="14.5" cy="7" r="2.6"/><circle cx="9.5" cy="17" r="2.6"/></svg></span>配置</button>
+      <button class="tab" role="tab" data-view="players" aria-selected="false">
+        <span class="sq"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg></span>玩家</button>
+      <button class="tab" role="tab" data-view="economy" aria-selected="false">
+        <span class="sq"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.6"/><circle cx="12" cy="12" r="2.4"/><path d="M6 9.6v4.8M18 9.6v4.8"/></svg></span>经济</button>
     </nav>
-    <div style="margin-top:16px; padding-top:14px; box-shadow:inset 0 1px 0 var(--hairline)">
+    <div style="margin-top:auto; padding-top:16px">
       <button class="btn sm" style="width:100%" id="logoutBtn">退出登录</button>
     </div>
   </aside>
