@@ -34,6 +34,8 @@ public class SessionStore {
 
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Long> sessions = new ConcurrentHashMap<>();
+    /** token -> 登录者标识，仅用于面板展示与日志。 */
+    private final Map<String, String> owners = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> failures = new ConcurrentHashMap<>();
     private final Map<String, Long> lockedUntil = new ConcurrentHashMap<>();
 
@@ -91,12 +93,30 @@ public class SessionStore {
         }
         failures.remove(ip);
         lockedUntil.remove(ip);
+        return issue("密码登录");
+    }
 
+    /**
+     * 直接签发一个会话，不校验密码。
+     *
+     * <p>供 OIDC 登录使用——身份已经由授权服务器验过了，这里只负责发凭证。
+     * <b>调用方必须自己确认该身份有权进入面板</b>，这个方法不做任何授权判断。</p>
+     *
+     * @param who 登录者的可读标识，仅用于展示与日志
+     */
+    public String issue(String who) {
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         String token = HexFormat.of().formatHex(bytes);
         sessions.put(token, System.currentTimeMillis() + ttlMillis);
+        owners.put(token, who == null || who.isBlank() ? "-" : who);
         return token;
+    }
+
+    /** 该会话是谁的；无效会话返回空串。 */
+    public String ownerOf(String token) {
+        String owner = token == null ? null : owners.get(token);
+        return owner == null ? "" : owner;
     }
 
     private boolean matches(String candidate) {
@@ -134,6 +154,7 @@ public class SessionStore {
         long now = System.currentTimeMillis();
         if (now > expiry) {
             sessions.remove(token);
+            owners.remove(token);
             return false;
         }
         sessions.put(token, now + ttlMillis);
@@ -143,18 +164,27 @@ public class SessionStore {
     public void logout(String token) {
         if (token != null) {
             sessions.remove(token);
+            owners.remove(token);
         }
     }
 
     /** 清空全部会话，面板关闭 / 重载时调用。 */
     public void clear() {
         sessions.clear();
+        owners.clear();
         failures.clear();
         lockedUntil.clear();
     }
 
     public int activeSessions() {
-        sessions.values().removeIf(expiry -> System.currentTimeMillis() > expiry);
+        long now = System.currentTimeMillis();
+        sessions.entrySet().removeIf(entry -> {
+            if (now > entry.getValue()) {
+                owners.remove(entry.getKey());
+                return true;
+            }
+            return false;
+        });
         return sessions.size();
     }
 }

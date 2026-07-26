@@ -38,18 +38,42 @@ public class PanelApi {
     private final EssentialEngine plugin;
     private final SessionStore sessions;
     private final ConfigService config;
+    /** 未启用 OAuth 登录时为 null。 */
+    private final OidcClient oidc;
 
-    public PanelApi(EssentialEngine plugin, SessionStore sessions, ConfigService config) {
+    public PanelApi(EssentialEngine plugin, SessionStore sessions, ConfigService config, OidcClient oidc) {
         this.plugin = plugin;
         this.sessions = sessions;
         this.config = config;
+        this.oidc = oidc;
     }
 
     public void register(Router router) {
         // ---- 公开 ----
-        router.get("/api/ping", (session, params) -> ApiResponse.ok(MODULE, Map.of("ok", true)));
+        // 登录页据此决定显示密码框、OAuth 按钮，还是两个都显示
+        router.get("/api/ping", (session, params) -> ApiResponse.ok(MODULE, Map.of(
+                "ok", true,
+                "password", sessions.hasPassword(),
+                "oauth", oidc != null,
+                "oauthLabel", plugin.getConfig().getString(
+                        "modules.panel.oauth.button-text", "使用 OAuth 登录"))));
+
+        router.get("/api/oauth/start", (session, params) -> {
+            if (oidc == null) {
+                return ApiResponse.error(MODULE, "未启用 OAuth 登录");
+            }
+            try {
+                return ApiResponse.ok(MODULE, Map.of("url", oidc.authorizationUrl()));
+            } catch (Exception error) {
+                plugin.getLogger().warning("[Panel] 构造 OAuth 授权地址失败: " + error.getMessage());
+                return ApiResponse.error(MODULE, "无法连接授权服务器，请检查 issuer 配置");
+            }
+        });
 
         router.post("/api/login", (session, params) -> {
+            if (!sessions.hasPassword()) {
+                return ApiResponse.error(MODULE, "本面板未启用密码登录");
+            }
             String ip = PanelServer.clientIp(session);
             if (sessions.isLocked(ip)) {
                 return ApiResponse.error(MODULE,
@@ -139,6 +163,7 @@ public class PanelApi {
         data.put("storage", plugin.storage() == null ? "-" : plugin.storage().getName());
         data.put("vaultHooked", plugin.isVaultRegistered());
         data.put("sessions", sessions.activeSessions());
+        data.put("oauth", oidc != null);
 
         try {
             double[] tps = Bukkit.getTPS();

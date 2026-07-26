@@ -34,6 +34,7 @@ public class ConfigService {
     private static final Set<String> SENSITIVE = Set.of(
             "modules.webapi.api-key",
             "modules.panel.password",
+            "modules.panel.oauth.client-secret",
             "storage.mysql.password");
 
     private final EssentialEngine plugin;

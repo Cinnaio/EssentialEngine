@@ -211,9 +211,10 @@ modules:
 
 改完重启或 `/ee reload`，然后打开 `http://127.0.0.1:8193`。
 
-> **没设置密码时模块会拒绝启动**，不存在「空密码进后台」的窗口。
+> **密码和 OAuth 至少要配好一个，否则模块会拒绝启动**，不存在「空密码进后台」的窗口。
 > 不想在配置文件里留明文，可以填 sha256 摘要：
-> `password: "sha256:<64 位十六进制摘要>"`。
+> `password: "sha256:<64 位十六进制摘要>"`；
+> 也可以完全不用密码，只走下面的 OAuth 登录。
 
 ### 功能
 
@@ -226,6 +227,48 @@ modules:
 
 配置页保存后**需要重载才生效**，保存与重载是两个独立动作：
 先改若干项再保存不会中断面板，只有点「重载插件」才会重启模块（届时需要重新登录）。
+
+### 用皮肤站账号登录（OAuth / OIDC）
+
+面板可以作为 **OpenID Connect 客户端**，用皮肤站等身份源登录，不必再单独记一个面板密码。
+配套的 provider 例如 [EnderPass](https://github.com/Cinnaio/EnderPass)（Blessing Skin 插件，
+让皮肤站变成标准 OIDC Provider）。
+
+**第一步**，在身份源那边创建应用，回调地址填「面板地址 + `/oauth/callback`」。
+如果你按推荐做法走 SSH 隧道访问面板，那就是：
+
+```
+http://127.0.0.1:8193/oauth/callback
+```
+
+**第二步**，把拿到的 client_id / client_secret 填进配置：
+
+```yaml
+modules:
+  panel:
+    oauth:
+      enabled: true
+      issuer: "https://skin.example.com"
+      client-id: "填这里"
+      client-secret: "填这里"
+      redirect-uri: "http://127.0.0.1:8193/oauth/callback"
+      require-admin: true
+```
+
+`issuer` 填到域名即可，会自动去取 `/.well-known/openid-configuration`。
+
+**谁能登录？** 默认只放行身份源里的**管理员**（EnderPass 会下发 `is_admin` claim）。
+想精确控制就用 `allowed-users`，填角色名、游戏 UUID 或身份源用户 ID 都行；
+一旦填了这份名单就以它为准。**被身份源封禁的账号任何情况下都会被拒绝。**
+
+密码登录和 OAuth 可以共存——两个都配好时登录页会同时显示，密码登录可以留作
+身份源挂掉时的兜底。也可以把 `password` 留空，只用 OAuth。
+
+实现上走的是标准授权码流程 + PKCE：`state` 防 CSRF、`nonce` 防重放，
+`id_token` 会对 JWKS 公钥做 RS256 验签并逐项核对 `iss`/`aud`/`exp`/`nonce`。
+规范允许直连 token 端点时跳过验签，但这里坚持验——你完全可能把 issuer 配成内网
+http 地址，那时候没有 TLS 可依赖。整个实现只用 JDK 自带的 HttpClient 和
+`java.security`，没有引入任何 JWT / OAuth 库。
 
 ### 安全须知
 

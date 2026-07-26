@@ -249,6 +249,34 @@ modules:
     # 是否把每次面板请求打进控制台日志
     log-requests: false
 
+    # ---- OAuth / OIDC 登录（可选）----
+    # 用皮肤站等 OpenID Connect 身份源登录面板，不必再单独记面板密码。
+    # 与密码登录可以共存：两个都配好时登录页会同时显示。
+    # 配套的 provider 例如 EnderPass（Blessing Skin 皮肤站插件）。
+    oauth:
+      enabled: false
+      # 身份源地址。填到域名即可，会自动拼 /.well-known/openid-configuration；
+      # 也可以直接填完整的发现文档地址
+      issuer: "https://skin.example.com"
+      # 在身份源那边创建应用后获得
+      client-id: ""
+      client-secret: ""
+      # 回调地址，必须和身份源里登记的完全一致。
+      # 就是「面板地址 + /oauth/callback」，例如通过 SSH 隧道访问时：
+      #   http://127.0.0.1:8193/oauth/callback
+      redirect-uri: "http://127.0.0.1:8193/oauth/callback"
+      # 必须包含 openid，否则身份源不会下发 id_token
+      scopes: "openid profile"
+      # 登录按钮上的文字
+      button-text: "使用皮肤站账号登录"
+      # 只允许身份源里的管理员登录（EnderPass 会下发 is_admin claim）。
+      # 关掉的话，身份源里任何一个账号都能进面板——除非用下面的名单限定。
+      require-admin: true
+      # 精确指定放行哪些人：可以填角色名、游戏 UUID 或身份源的用户 ID。
+      # 一旦填了，就以这份名单为准（require-admin 不再生效）。
+      # 被身份源封禁的账号任何情况下都会被拒绝。
+      allowed-users: []
+
   # ---------------- REST API ----------------
   # 给外部程序（QQ / Discord 机器人、网页后台、监控面板）调用的 HTTP 接口。
   # 默认关闭；开启前请务必修改 api-key，并尽量只监听 127.0.0.1。

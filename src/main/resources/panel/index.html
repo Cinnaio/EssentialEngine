@@ -52,6 +52,8 @@
 }
 
 *{ box-sizing:border-box; margin:0; padding:0; }
+/* 作者样式里的 display 会盖掉 [hidden] 的默认 display:none，这里补回来 */
+[hidden]{ display:none !important; }
 html,body{ height:100%; }
 body{
   font-family: var(--font-ui);
@@ -119,6 +121,13 @@ svg{ stroke:currentColor; fill:none; stroke-width:1.9; stroke-linecap:round; str
 .mark svg{ width:32px; height:32px; }
 .login-card h1{ font-size:24px; font-weight:700; text-align:center; letter-spacing:-.5px; }
 .login-card p{ font-size:14px; color:var(--text-2); text-align:center; margin:5px 0 24px; }
+/* 两种登录方式之间的分隔线 */
+.sep{ display:flex; align-items:center; gap:12px; margin:16px 0;
+  font-size:12.5px; color:var(--text-3); }
+.sep::before,.sep::after{ content:""; flex:1; height:1px; background:var(--hairline); }
+.btn.oauth{ display:flex; align-items:center; justify-content:center; gap:9px;
+  background:rgba(120,120,128,.12); color:var(--text); }
+.btn.oauth svg{ width:19px; height:19px; color:var(--accent); }
 
 /* ============================ 布局 ============================ */
 #app{ display:none; min-height:100dvh; }
@@ -392,8 +401,15 @@ input:-webkit-autofill:focus{
     </div>
     <h1>EssentialEngine</h1>
     <p>管理面板</p>
-    <input type="password" id="pw" placeholder="面板密码" autocomplete="current-password">
-    <button class="btn primary wide" style="margin-top:14px" type="submit" id="loginBtn">登录</button>
+    <div id="pwBox">
+      <input type="password" id="pw" placeholder="面板密码" autocomplete="current-password">
+      <button class="btn primary wide" style="margin-top:12px" type="submit" id="loginBtn">登录</button>
+    </div>
+    <div id="sepBox" class="sep" hidden>或</div>
+    <button class="btn wide oauth" type="button" id="oauthBtn" hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7z"/><path d="M12 12 20.5 7M12 12v9.4M12 12 3.5 7"/></svg>
+      <span id="oauthLabel">使用 OAuth 登录</span>
+    </button>
     <p id="loginMsg" style="margin:14px 0 0; min-height:18px; font-size:13px; color:var(--danger)"></p>
   </form>
 </section>
@@ -607,6 +623,7 @@ function showApp(){
 
 $("#loginForm").addEventListener("submit", async e => {
   e.preventDefault();
+  if ($("#pwBox").hidden) return;   // 只启用了 OAuth 时，回车不该走密码登录
   const pw = $("#pw");
   if (!pw.value){
     pw.classList.add("bad");
@@ -1011,8 +1028,58 @@ async function loadEconomy(){
 }
 $("#refreshEco").addEventListener("click", loadEconomy);
 
+/* ---------------------------- OAuth ---------------------------- */
+$("#oauthBtn").addEventListener("click", async () => {
+  const btn = $("#oauthBtn");
+  btn.disabled = true;
+  try{
+    const data = await api("/oauth/start");
+    location.href = data.url;
+  }catch(err){
+    $("#loginMsg").textContent = err.message;
+    btn.disabled = false;
+  }
+});
+
+/** 按服务端实际启用的方式决定登录页显示什么。 */
+async function applyLoginMethods(){
+  let info;
+  try{
+    const res = await fetch("/api/ping");
+    info = (await res.json()).data;
+  }catch(_){ return; }
+
+  $("#pwBox").hidden = !info.password;
+  $("#oauthBtn").hidden = !info.oauth;
+  $("#sepBox").hidden = !(info.password && info.oauth);
+  if (info.oauthLabel) $("#oauthLabel").textContent = info.oauthLabel;
+}
+
+/**
+ * 从 URL fragment 里取回 OAuth 回调带来的会话。
+ * fragment 不会发给服务端、也不进访问日志，所以拿它传 token 比 query string 安全；
+ * 读完立刻用 replaceState 清掉，免得留在地址栏和浏览器历史里。
+ */
+function consumeCallbackFragment(){
+  const hash = location.hash.slice(1);
+  if (!hash) return null;
+  const params = new URLSearchParams(hash);
+  const token = params.get("token");
+  const error = params.get("error");
+  if (token || error){
+    history.replaceState(null, "", location.pathname);
+  }
+  if (token){ store.token = token; return "ok"; }
+  if (error){ return error; }
+  return null;
+}
+
 /* ---------------------------- 启动 ---------------------------- */
 (async function boot(){
+  const callback = consumeCallbackFragment();
+  await applyLoginMethods();
+
+  if (callback && callback !== "ok"){ showLogin(callback); return; }
   if (!store.token){ showLogin(); return; }
   try{ await api("/overview"); showApp(); }
   catch(_){ /* api() 内部已经在 401 时切回登录页 */ }

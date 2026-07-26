@@ -8,6 +8,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.logging.Logger;
 
 /**
@@ -24,19 +25,32 @@ public class PanelServer extends NanoHTTPD {
 
     private static final String PAGE_RESOURCE = "panel/index.html";
 
+    /** OIDC 回调的处理器，由 {@link PanelModule} 注入。 */
+    @FunctionalInterface
+    public interface CallbackHandler {
+        /**
+         * 处理授权服务器的回调。
+         *
+         * @return 浏览器要跳转到的地址；成功时形如 {@code /#token=...}，失败时 {@code /#error=...}
+         */
+        String handle(String code, String state, String error);
+    }
+
     private final Router router;
     private final SessionStore sessions;
     private final Logger logger;
     private final boolean logRequests;
     private final byte[] page;
+    private final CallbackHandler oidcCallback;
 
     public PanelServer(String hostname, int port, Router router, SessionStore sessions,
-                       Logger logger, boolean logRequests) {
+                       Logger logger, boolean logRequests, CallbackHandler oidcCallback) {
         super(hostname, port);
         this.router = router;
         this.sessions = sessions;
         this.logger = logger;
         this.logRequests = logRequests;
+        this.oidcCallback = oidcCallback;
         this.page = loadPage();
     }
 
@@ -76,12 +90,28 @@ public class PanelServer extends NanoHTTPD {
             return harden(response);
         }
 
+        // OIDC 回调：授权服务器把浏览器重定向回来，必须回 302 而不是 JSON。
+        // 这一步天然是未登录状态，因此不能要求会话。
+        if (uri.equals("/oauth/callback")) {
+            if (oidcCallback == null) {
+                return json(Response.Status.NOT_FOUND, ApiResponse.error("未启用 OAuth 登录"));
+            }
+            Map<String, String> query = session.getParms();
+            String target = oidcCallback.handle(
+                    query.get("code"), query.get("state"), query.get("error"));
+            Response redirect = newFixedLengthResponse(Response.Status.REDIRECT, "text/plain", "");
+            redirect.addHeader("Location", target);
+            return harden(redirect);
+        }
+
         if (!uri.startsWith("/api/")) {
             return json(Response.Status.NOT_FOUND, ApiResponse.error("页面不存在: " + uri));
         }
 
-        // 登录与探活是仅有的两个免鉴权接口
-        boolean publicRoute = uri.equals("/api/login") || uri.equals("/api/ping");
+        // 登录、探活与发起 OAuth 是仅有的免鉴权接口
+        boolean publicRoute = uri.equals("/api/login")
+                || uri.equals("/api/ping")
+                || uri.equals("/api/oauth/start");
         if (!publicRoute && !sessions.validate(bearer(session))) {
             return json(Response.Status.UNAUTHORIZED, ApiResponse.error("未登录或会话已过期"));
         }
