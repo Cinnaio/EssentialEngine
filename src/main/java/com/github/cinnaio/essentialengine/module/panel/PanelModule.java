@@ -5,7 +5,6 @@ import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.module.webapi.http.Router;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * 网页管理面板模块。
@@ -40,8 +39,6 @@ public class PanelModule extends EngineModule {
 
         String bindAddress = cfgString("bind-address", "127.0.0.1");
         int port = cfgInt("port", 8193);
-        boolean allowConsole = cfgBool("allow-console", false);
-        List<String> allowedCommands = cfgList("allowed-commands");
 
         if (!bindAddress.equals("127.0.0.1") && !bindAddress.equalsIgnoreCase("localhost")) {
             plugin.getLogger().warning("========================================");
@@ -52,8 +49,7 @@ public class PanelModule extends EngineModule {
         }
 
         Router router = new Router();
-        new PanelApi(plugin, sessions, new ConfigService(plugin), allowConsole, allowedCommands)
-                .register(router);
+        new PanelApi(plugin, sessions, new ConfigService(plugin)).register(router);
 
         server = new PanelServer(bindAddress, port, router, sessions,
                 plugin.getLogger(), cfgBool("log-requests", false));

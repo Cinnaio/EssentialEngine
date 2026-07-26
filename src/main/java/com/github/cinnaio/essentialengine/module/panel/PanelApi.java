@@ -17,7 +17,6 @@ import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -35,16 +34,11 @@ public class PanelApi {
     private final EssentialEngine plugin;
     private final SessionStore sessions;
     private final ConfigService config;
-    private final boolean allowConsole;
-    private final List<String> allowedCommands;
 
-    public PanelApi(EssentialEngine plugin, SessionStore sessions, ConfigService config,
-                    boolean allowConsole, List<String> allowedCommands) {
+    public PanelApi(EssentialEngine plugin, SessionStore sessions, ConfigService config) {
         this.plugin = plugin;
         this.sessions = sessions;
         this.config = config;
-        this.allowConsole = allowConsole;
-        this.allowedCommands = allowedCommands;
     }
 
     public void register(Router router) {
@@ -117,36 +111,6 @@ public class PanelApi {
             return ApiResponse.ok(MODULE, Map.of("ok", true), "正在重载，面板将在几秒后恢复");
         });
 
-        router.post("/api/console", (session, params) -> {
-            if (!allowConsole) {
-                return ApiResponse.error(MODULE, "控制台功能已关闭，如需使用请在配置里打开 allow-console");
-            }
-            JsonObject body = Router.readJson(session);
-            String command = body.has("command") ? body.get("command").getAsString() : "";
-            command = sanitizeLine(command).replaceFirst("^/", "");
-            if (command.isEmpty()) {
-                return ApiResponse.error(MODULE, "命令不能为空");
-            }
-            if (!isAllowed(command)) {
-                return ApiResponse.error(MODULE, "该命令不在白名单中");
-            }
-            final String target = command;
-            Boolean ok = MainThread.call(plugin,
-                    () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), target), null);
-            if (ok == null) {
-                return ApiResponse.error(MODULE, "命令执行超时");
-            }
-            return ApiResponse.ok(MODULE, Map.of("command", target, "success", ok),
-                    ok ? "命令已执行" : "命令执行失败或不存在");
-        });
-    }
-
-    private boolean isAllowed(String command) {
-        if (allowedCommands == null || allowedCommands.isEmpty()) {
-            return true;
-        }
-        String base = command.split(" ")[0].toLowerCase(Locale.ROOT);
-        return allowedCommands.stream().anyMatch(entry -> entry.equalsIgnoreCase(base));
     }
 
     // ------------------------------------------------------------------ 概览

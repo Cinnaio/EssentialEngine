@@ -188,11 +188,6 @@ modules:
     # 同一 IP 连续失败多少次后锁定，以及锁定时长（分钟）
     max-login-attempts: 5
     lockout-minutes: 10
-    # 是否允许在面板里执行控制台命令。默认关闭——这等于把控制台权限
-    # 交给任何拿到面板密码的人，确认有必要再打开。
-    allow-console: false
-    # allow-console 打开后，只允许执行这里列出的命令；留空表示不限制（不建议）
-    allowed-commands: []
     # 是否把每次面板请求打进控制台日志
     log-requests: false
 

@@ -265,16 +265,6 @@ input:-webkit-autofill:focus{
 .pcard .meta{ display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
 .pcard .acts{ display:flex; gap:7px; flex-wrap:wrap; }
 
-/* ============================ 控制台 ============================ */
-#log{ font-family:var(--font-mono); font-size:12.5px; line-height:1.72; padding:18px 20px;
-  border-radius:var(--radius-lg); height:min(52vh,440px); overflow-y:auto;
-  white-space:pre-wrap; word-break:break-all; }
-#log .t{ color:var(--text-3); }
-#log .e{ color:var(--danger); }
-#log .o{ color:var(--accent-2); }
-.cmdbar{ display:flex; gap:10px; }
-.cmdbar input{ font-family:var(--font-mono); }
-
 /* ============================ 杂项 ============================ */
 .toast{
   position:fixed; left:50%; bottom:34px; translate:-50% 0; z-index:50;
@@ -354,7 +344,6 @@ input:-webkit-autofill:focus{
       <button class="tab" role="tab" data-view="overview" aria-selected="true"><span class="ic">◎</span>概览</button>
       <button class="tab" role="tab" data-view="config"   aria-selected="false"><span class="ic">⚙</span>配置</button>
       <button class="tab" role="tab" data-view="players"  aria-selected="false"><span class="ic">◍</span>玩家</button>
-      <button class="tab" role="tab" data-view="console"  aria-selected="false"><span class="ic">▶</span>控制台</button>
     </nav>
     <div style="margin-top:16px; padding-top:14px; box-shadow:inset 0 1px 0 var(--hairline)">
       <button class="btn sm" style="width:100%" id="logoutBtn">退出登录</button>
@@ -398,16 +387,6 @@ input:-webkit-autofill:focus{
         <button class="btn" id="refreshPlayers">刷新</button>
       </div>
       <div class="plist" id="plist"></div>
-    </section>
-
-    <!-- 控制台 -->
-    <section class="view" id="v-console">
-      <div class="head"><div><h2>控制台</h2><p>以控制台身份执行命令</p></div></div>
-      <div id="log" class="glass"></div>
-      <div class="cmdbar">
-        <input id="cmd" placeholder="输入命令，回车执行（不用带 /）" autocomplete="off">
-        <button class="btn primary" id="runBtn">执行</button>
-      </div>
     </section>
   </main>
 </div>
@@ -862,33 +841,6 @@ async function loadPlayers(){
   });
 }
 $("#refreshPlayers").addEventListener("click", loadPlayers);
-
-/* ---------------------------- 控制台 ---------------------------- */
-function logLine(text, cls){
-  const el = $("#log");
-  const line = document.createElement("div");
-  if (cls) line.className = cls;
-  const time = document.createElement("span");
-  time.className = "t";
-  time.textContent = new Date().toLocaleTimeString() + "  ";
-  line.append(time, document.createTextNode(text));
-  el.append(line);
-  el.scrollTop = el.scrollHeight;
-}
-
-async function runCommand(){
-  const input = $("#cmd");
-  const command = input.value.trim();
-  if (!command) return;
-  input.value = "";
-  logLine("> " + command);
-  try{
-    const res = await api("/console", "POST", { command });
-    logLine(res.success ? "命令已执行" : "命令执行失败或不存在", res.success ? "o" : "e");
-  }catch(err){ logLine(err.message, "e"); }
-}
-$("#runBtn").addEventListener("click", runCommand);
-$("#cmd").addEventListener("keydown", e => { if (e.key === "Enter") runCommand(); });
 
 /* ---------------------------- 启动 ---------------------------- */
 (async function boot(){
