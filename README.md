@@ -115,6 +115,22 @@ Bukkit 会先对所有插件依次调用 `onLoad()`，然后才开始调用任�
 - `essentialengine.homes.<数字>` / `essentialengine.homes.unlimited` —— 家数量上限
 - `essentialengine.teleport.bypass.warmup` / `.cooldown` —— 免吟唱 / 免冷却
 - `essentialengine.vanish.see` —— 能看见隐身玩家
+
+传送冷却与吟唱除了全局的 `warmup-seconds` / `cooldown-seconds`，
+还可以按类型覆写（`home` `warp` `spawn` `tpa` `back` `rtp`）：
+
+```yaml
+modules:
+  teleport:
+    cooldown-seconds: 5   # 没单独配的类型用它
+    cooldowns:
+      rtp: 300            # /rtp 要现场生成区块，单独拉长
+      home: 0             # 0 = 这一类不限制
+    warmups:
+      spawn: 0            # 回城秒传
+```
+
+没写 `cooldowns` / `warmups` 段时行为与旧版本完全一致。
 - `essentialengine.chat.color` —— 聊天使用颜色代码
 - `essentialengine.kit.<套装名>` —— 领取指定套装
 - `essentialengine.ban.exempt` / `essentialengine.kick.exempt` —— 免疫封禁 / 踢出

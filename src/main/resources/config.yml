@@ -78,6 +78,17 @@ modules:
     warmup-seconds: 3
     # 传送冷却秒数；权限 essentialengine.teleport.bypass.cooldown 可免除
     cooldown-seconds: 5
+    # 按类型覆写冷却 / 吟唱（六种类型：home、warp、spawn、tpa、back、rtp）。
+    # 没写的类型用上面的全局值；写了 0 表示这一类不限制。
+    # 典型用法：/rtp 要现场生成区块、开销远大于其他传送，单独拉长它的冷却，
+    # 而不必把 /home 也一起变慢。取消注释即可生效：
+    # cooldowns:
+    #   rtp: 300
+    #   back: 10
+    #   home: 0
+    # warmups:
+    #   rtp: 5
+    #   spawn: 0
     # 吟唱期间移动 / 受伤是否打断
     cancel-on-move: true
     cancel-on-damage: true

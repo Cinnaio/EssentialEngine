@@ -7,6 +7,7 @@ import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.LocationUtil;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
 import org.bukkit.Location;
+import org.bukkit.configuration.Configuration;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 
@@ -211,12 +212,33 @@ public class TeleportManager {
     }
 
     public void applyCooldown(Player player, String type) {
-        int seconds = plugin.getConfig().getInt("modules.teleport.cooldown-seconds", 5);
+        int seconds = secondsFor("cooldowns", type, "cooldown-seconds", 5);
         if (seconds <= 0 || player.hasPermission(BYPASS_COOLDOWN)) {
             return;
         }
         cooldowns.computeIfAbsent(player.getUniqueId(), key -> new ConcurrentHashMap<>())
                 .put(type, System.currentTimeMillis() + seconds * 1000L);
+    }
+
+    private int secondsFor(String section, String type, String globalKey, int fallback) {
+        return secondsFor(plugin.getConfig(), section, type, globalKey, fallback);
+    }
+
+    /**
+     * 某种传送的冷却 / 吟唱秒数：先查按类型的覆写，没配再回落到全局值。
+     *
+     * <p>六种传送的开销差了几个数量级——{@code /home} 传去已加载的坐标几乎零成本，
+     * {@code /rtp} 却常要现场生成新区块。共用一个时长时这两个需求互斥：
+     * 想防住 rtp 刷区块就得把 home 也变成几分钟一次。分开配才解得开。</p>
+     *
+     * <p>覆写允许填 0（这一类不限制），所以判断的是「有没有配」而不是「是不是正数」。</p>
+     */
+    static int secondsFor(Configuration config, String section, String type, String globalKey, int fallback) {
+        String override = "modules.teleport." + section + "." + type;
+        if (config.contains(override)) {
+            return config.getInt(override);
+        }
+        return config.getInt("modules.teleport." + globalKey, fallback);
     }
 
     // ------------------------------------------------------------------ 传送
@@ -228,7 +250,7 @@ public class TeleportManager {
         }
         checkCooldown(player, type);
 
-        int warmup = plugin.getConfig().getInt("modules.teleport.warmup-seconds", 3);
+        int warmup = secondsFor("warmups", type, "warmup-seconds", 3);
         if (warmup <= 0 || player.hasPermission(BYPASS_WARMUP)) {
             performTeleport(player, destination);
             applyCooldown(player, type);
