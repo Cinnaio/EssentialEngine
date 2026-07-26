@@ -1,10 +1,14 @@
 package com.github.cinnaio.essentialengine.core.storage;
 
+import com.google.gson.Gson;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -25,6 +29,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * </pre>
  */
 public class YamlStorage implements StorageProvider {
+
+    /** 流水序列化用；UUID 会被 Gson 序列化成字符串，反序列化时自动还原。 */
+    private static final Gson TX_GSON = new Gson();
 
     private final Plugin plugin;
     private final File userFolder;
@@ -217,6 +224,135 @@ public class YamlStorage implements StorageProvider {
             config.set(entry.getKey(), entry.getValue());
         }
         config.save(new File(dataFolder, key + ".yml"));
+    }
+
+    // ------------------------------------------------------------------ 经济流水
+    //
+    // 流水是「只追加、按时间倒序读」的数据，用 YAML 存会越读越慢，
+    // 所以单独写成 JSONL（一行一条 JSON）：追加是 O(1)，统计时顺序扫一遍即可。
+
+    private File transactionFile() {
+        return new File(dataFolder, "transactions.jsonl");
+    }
+
+    @Override
+    public synchronized void appendTransactions(List<TransactionRecord> records) throws Exception {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        StringBuilder buffer = new StringBuilder(records.size() * 160);
+        for (TransactionRecord record : records) {
+            buffer.append(TX_GSON.toJson(record)).append('\n');
+        }
+        Files.writeString(transactionFile().toPath(), buffer,
+                StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    }
+
+    /** 顺序读全部流水。文件不存在时返回空表。 */
+    private List<TransactionRecord> readAll() {
+        File file = transactionFile();
+        if (!file.exists()) {
+            return List.of();
+        }
+        List<TransactionRecord> result = new ArrayList<>();
+        try (var lines = Files.lines(file.toPath(), StandardCharsets.UTF_8)) {
+            lines.forEach(line -> {
+                if (line.isBlank()) {
+                    return;
+                }
+                try {
+                    TransactionRecord record = TX_GSON.fromJson(line, TransactionRecord.class);
+                    if (record != null && record.uuid() != null) {
+                        result.add(record);
+                    }
+                } catch (Exception ignored) {
+                    // 跳过写坏的行，不因为一行损坏就丢掉整份流水
+                }
+            });
+        } catch (Exception error) {
+            plugin.getLogger().warning("读取经济流水失败: " + error.getMessage());
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized List<TransactionRecord> recentTransactions(UUID player, int limit) {
+        List<TransactionRecord> all = readAll();
+        List<TransactionRecord> result = new ArrayList<>();
+        for (int i = all.size() - 1; i >= 0 && result.size() < Math.max(1, limit); i--) {
+            TransactionRecord record = all.get(i);
+            if (player == null || player.equals(record.uuid())) {
+                result.add(record);
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized List<SourceVolume> volumeBySource(long since) {
+        Map<String, double[]> totals = new LinkedHashMap<>();
+        for (TransactionRecord record : readAll()) {
+            if (record.timestamp() < since) {
+                continue;
+            }
+            double[] slot = totals.computeIfAbsent(
+                    record.source() == null ? "" : record.source(), key -> new double[3]);
+            if (record.isInflow()) {
+                slot[0] += record.amount();
+            } else if (record.isOutflow()) {
+                slot[1] += record.amount();
+            }
+            slot[2]++;
+        }
+        List<SourceVolume> result = new ArrayList<>();
+        totals.forEach((source, slot) ->
+                result.add(new SourceVolume(source, slot[0], slot[1], (long) slot[2])));
+        result.sort(Comparator.comparingLong(SourceVolume::count).reversed());
+        return result;
+    }
+
+    @Override
+    public synchronized int pruneTransactions(long before) throws Exception {
+        File file = transactionFile();
+        if (!file.exists()) {
+            return 0;
+        }
+        List<TransactionRecord> all = readAll();
+        List<TransactionRecord> keep = new ArrayList<>(all.size());
+        for (TransactionRecord record : all) {
+            if (record.timestamp() >= before) {
+                keep.add(record);
+            }
+        }
+        int removed = all.size() - keep.size();
+        if (removed <= 0) {
+            return 0;
+        }
+        StringBuilder buffer = new StringBuilder(keep.size() * 160);
+        for (TransactionRecord record : keep) {
+            buffer.append(TX_GSON.toJson(record)).append('\n');
+        }
+        Files.writeString(file.toPath(), buffer, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        return removed;
+    }
+
+    @Override
+    public EconomySummary economySummary() {
+        long accounts = 0;
+        double total = 0;
+        double richest = 0;
+        for (UUID uuid : allUsers()) {
+            Map<String, Object> data = loadUser(uuid);
+            if (data == null) {
+                continue;
+            }
+            double balance = data.get("balance") instanceof Number number ? number.doubleValue() : 0D;
+            accounts++;
+            total += balance;
+            richest = Math.max(richest, balance);
+        }
+        return new EconomySummary(accounts, total, accounts == 0 ? 0 : total / accounts, richest);
     }
 
     /** 把配置节点递归转换成普通 Map，保持和 JSON 后端一致的结构。 */

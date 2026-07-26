@@ -68,6 +68,32 @@ public class SqliteStorage extends SqlStorage {
     }
 
     @Override
+    protected String createTransactionsTableSql() {
+        return "CREATE TABLE IF NOT EXISTS " + transactionsTable() + " ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "ts INTEGER NOT NULL,"
+                + "uuid TEXT NOT NULL,"
+                + "name TEXT NOT NULL DEFAULT '',"
+                + "type TEXT NOT NULL,"
+                + "amount REAL NOT NULL DEFAULT 0,"
+                + "balance_after REAL NOT NULL DEFAULT 0,"
+                + "source TEXT NOT NULL DEFAULT '',"
+                + "detail TEXT NOT NULL DEFAULT ''"
+                + ")";
+    }
+
+    @Override
+    protected String[] extraIndexSql() {
+        // 流水的两种查询模式：按时间倒序翻页、按玩家过滤
+        return new String[]{
+                "CREATE INDEX IF NOT EXISTS idx_" + transactionsTable() + "_ts ON "
+                        + transactionsTable() + " (ts)",
+                "CREATE INDEX IF NOT EXISTS idx_" + transactionsTable() + "_uuid ON "
+                        + transactionsTable() + " (uuid)"
+        };
+    }
+
+    @Override
     protected String upsertUserSql() {
         return "INSERT INTO " + usersTable() + " (uuid, name, balance, data) VALUES (?, ?, ?, ?) "
                 + "ON CONFLICT(uuid) DO UPDATE SET name = excluded.name, "

@@ -265,6 +265,33 @@ input:-webkit-autofill:focus{
 .pcard .meta{ display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
 .pcard .acts{ display:flex; gap:7px; flex-wrap:wrap; }
 
+/* ============================ 经济 ============================ */
+/* 来源占比：用一条横向条形表达各来源的笔数占比，比纯数字直观 */
+.src{ display:flex; align-items:center; gap:12px; padding:11px 0;
+  box-shadow: inset 0 -1px 0 var(--hairline); }
+.src:last-child{ box-shadow:none; }
+.src .nm{ flex:none; width:min(150px,30%); font-size:13.5px; font-weight:560;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.src .bar{ flex:1; height:8px; border-radius:100px; background:var(--field);
+  overflow:hidden; display:flex; }
+.src .bar i{ display:block; height:100%; }
+.src .bar .i{ background:var(--accent-2); }
+.src .bar .o{ background:var(--danger); }
+.src .amt{ flex:none; font-size:11.5px; color:var(--text-2); text-align:right;
+  width:min(190px,38%); font-variant-numeric:tabular-nums; }
+
+.tx{ display:flex; align-items:center; gap:10px; padding:9px 0; font-size:12.5px;
+  box-shadow: inset 0 -1px 0 var(--hairline); }
+.tx:last-child{ box-shadow:none; }
+.tx .t{ flex:none; width:min(140px,26%); color:var(--text-3); font-family:var(--font-mono);
+  font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tx .p{ flex:none; width:min(120px,20%); font-weight:560;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tx .a{ flex:none; width:min(110px,18%); font-variant-numeric:tabular-nums; font-weight:590; }
+.tx .a.up{ color:var(--accent-2); }
+.tx .a.down{ color:var(--danger); }
+.tx .s{ flex:1; color:var(--text-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
 /* ============================ 杂项 ============================ */
 .toast{
   position:fixed; left:50%; bottom:34px; translate:-50% 0; z-index:50;
@@ -344,6 +371,7 @@ input:-webkit-autofill:focus{
       <button class="tab" role="tab" data-view="overview" aria-selected="true"><span class="ic">◎</span>概览</button>
       <button class="tab" role="tab" data-view="config"   aria-selected="false"><span class="ic">⚙</span>配置</button>
       <button class="tab" role="tab" data-view="players"  aria-selected="false"><span class="ic">◍</span>玩家</button>
+      <button class="tab" role="tab" data-view="economy"  aria-selected="false"><span class="ic">◈</span>经济</button>
     </nav>
     <div style="margin-top:16px; padding-top:14px; box-shadow:inset 0 1px 0 var(--hairline)">
       <button class="btn sm" style="width:100%" id="logoutBtn">退出登录</button>
@@ -387,6 +415,23 @@ input:-webkit-autofill:focus{
         <button class="btn" id="refreshPlayers">刷新</button>
       </div>
       <div class="plist" id="plist"></div>
+    </section>
+
+    <!-- 经济 -->
+    <section class="view" id="v-economy">
+      <div class="head">
+        <div><h2>经济</h2><p id="ecoLine">—</p></div>
+        <button class="btn" id="refreshEco">刷新</button>
+      </div>
+      <div class="tiles" id="ecoTiles"></div>
+      <div class="panel glass">
+        <h3 id="srcTitle">资金来源</h3>
+        <div id="srcList"></div>
+      </div>
+      <div class="panel glass">
+        <h3>最近流水</h3>
+        <div id="txList"></div>
+      </div>
     </section>
   </main>
 </div>
@@ -554,6 +599,7 @@ $$(".tab").forEach(tab => tab.addEventListener("click", () => {
   if (view === "overview") loadOverview();
   if (view === "config" && !cfgCache) loadConfig();
   if (view === "players") loadPlayers();
+  if (view === "economy") loadEconomy();
 }));
 
 /* ---------------------------- 概览 ---------------------------- */
@@ -841,6 +887,85 @@ async function loadPlayers(){
   });
 }
 $("#refreshPlayers").addEventListener("click", loadPlayers);
+
+/* ---------------------------- 经济 ---------------------------- */
+function money(symbol, value){
+  return symbol + Number(value || 0).toLocaleString("en-US",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function loadEconomy(){
+  let d;
+  try{ d = await api("/economy"); }catch(err){ toast(err.message, true); return; }
+
+  $("#ecoLine").textContent = d.tracking
+    ? ("统计窗口：近 " + d.windowDays + " 天")
+    : "流水记录已关闭，仅显示余额统计";
+
+  const tiles = $("#ecoTiles");
+  tiles.textContent = "";
+  tiles.append(
+    tile("流通总量", money(d.symbol, d.total)),
+    tile("账户数", String(d.accounts)),
+    tile("人均余额", money(d.symbol, d.average)),
+    tile("最高余额", money(d.symbol, d.richest))
+  );
+  if (d.tracking){
+    tiles.append(tile("净流入", money(d.symbol, d.inflow - d.outflow),
+      "+" + money(d.symbol, d.inflow) + " / -" + money(d.symbol, d.outflow)));
+  }
+
+  // ---- 来源 ----
+  $("#srcTitle").textContent = "资金来源 · 近 " + d.windowDays + " 天";
+  const srcHost = $("#srcList");
+  srcHost.textContent = "";
+  if (!d.tracking || !d.sources.length){
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = d.tracking ? "这段时间还没有流水记录" : "开启 track-transactions 后即可看到资金流向";
+    srcHost.append(empty);
+  }else{
+    const peak = Math.max(...d.sources.map(s => s.in + s.out), 1);
+    d.sources.forEach(s => {
+      const row = document.createElement("div"); row.className = "src";
+      const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = s.source;
+      const bar = document.createElement("div"); bar.className = "bar";
+      const inBar = document.createElement("i"); inBar.className = "i";
+      inBar.style.width = (s.in / peak * 100) + "%";
+      const outBar = document.createElement("i"); outBar.className = "o";
+      outBar.style.width = (s.out / peak * 100) + "%";
+      bar.append(inBar, outBar);
+      const amt = document.createElement("div"); amt.className = "amt";
+      amt.textContent = s.count + " 笔 · +" + money(d.symbol, s.in) + " / -" + money(d.symbol, s.out);
+      row.append(nm, bar, amt);
+      srcHost.append(row);
+    });
+  }
+
+  // ---- 最近流水 ----
+  const txHost = $("#txList");
+  txHost.textContent = "";
+  if (!d.recent.length){
+    const empty = document.createElement("div");
+    empty.className = "empty"; empty.textContent = "暂无流水";
+    txHost.append(empty);
+    return;
+  }
+  d.recent.forEach(t => {
+    const row = document.createElement("div"); row.className = "tx";
+    const time = document.createElement("div"); time.className = "t"; time.textContent = t.time;
+    const who = document.createElement("div"); who.className = "p"; who.textContent = t.player || "-";
+    const amt = document.createElement("div");
+    const up = t.type === "DEPOSIT";
+    amt.className = "a " + (t.type === "SET" ? "" : (up ? "up" : "down"));
+    amt.textContent = (t.type === "SET" ? "±" : (up ? "+" : "-")) + money(d.symbol, t.amount);
+    const src = document.createElement("div"); src.className = "s";
+    src.textContent = t.detail ? (t.source + " · " + t.detail) : t.source;
+    row.append(time, who, amt, src);
+    txHost.append(row);
+  });
+}
+$("#refreshEco").addEventListener("click", loadEconomy);
 
 /* ---------------------------- 启动 ---------------------------- */
 (async function boot(){

@@ -65,12 +65,33 @@ public abstract class SqlStorage implements StorageProvider {
         return prefix + "globals";
     }
 
+    protected String transactionsTable() {
+        return prefix + "transactions";
+    }
+
+    /** 流水表建表语句。两种方言的自增主键写法不同，交给子类。 */
+    protected abstract String createTransactionsTableSql();
+
+    /**
+     * 建表之后要额外执行的索引语句。
+     *
+     * <p>MySQL 不支持 {@code CREATE INDEX IF NOT EXISTS}，所以它把索引写在建表语句里、
+     * 这里返回空数组；SQLite 支持，就在这里单独建。</p>
+     */
+    protected String[] extraIndexSql() {
+        return new String[0];
+    }
+
     @Override
     public void init() throws Exception {
         this.driver = createDriver();
         try (Connection conn = openConnection(); Statement statement = conn.createStatement()) {
             statement.executeUpdate(createUsersTableSql());
             statement.executeUpdate(createGlobalsTableSql());
+            statement.executeUpdate(createTransactionsTableSql());
+            for (String sql : extraIndexSql()) {
+                statement.executeUpdate(sql);
+            }
         }
         // 连接保持复用
         this.connection = openConnection();
@@ -217,6 +238,119 @@ public abstract class SqlStorage implements StorageProvider {
             statement.setString(1, key);
             statement.setString(2, GSON.toJson(value));
             statement.executeUpdate();
+        }
+    }
+
+    // ------------------------------------------------------------------ 经济流水
+
+    @Override
+    public synchronized void appendTransactions(List<TransactionRecord> records) throws Exception {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        String sql = "INSERT INTO " + transactionsTable()
+                + " (ts, uuid, name, type, amount, balance_after, source, detail)"
+                + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        Connection conn = connection();
+        boolean autoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try (PreparedStatement statement = conn.prepareStatement(sql)) {
+            for (TransactionRecord record : records) {
+                statement.setLong(1, record.timestamp());
+                statement.setString(2, record.uuid().toString());
+                statement.setString(3, record.name() == null ? "" : record.name());
+                statement.setString(4, record.type());
+                statement.setDouble(5, record.amount());
+                statement.setDouble(6, record.balanceAfter());
+                statement.setString(7, record.source() == null ? "" : record.source());
+                statement.setString(8, record.detail() == null ? "" : record.detail());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+            conn.commit();
+        } catch (Exception error) {
+            conn.rollback();
+            throw error;
+        } finally {
+            conn.setAutoCommit(autoCommit);
+        }
+    }
+
+    @Override
+    public synchronized List<TransactionRecord> recentTransactions(UUID player, int limit) throws Exception {
+        List<TransactionRecord> result = new ArrayList<>();
+        String sql = "SELECT ts, uuid, name, type, amount, balance_after, source, detail FROM "
+                + transactionsTable()
+                + (player == null ? "" : " WHERE uuid = ?")
+                + " ORDER BY ts DESC LIMIT ?";
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            int index = 1;
+            if (player != null) {
+                statement.setString(index++, player.toString());
+            }
+            statement.setInt(index, Math.max(1, limit));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    UUID uuid;
+                    try {
+                        uuid = UUID.fromString(rs.getString("uuid"));
+                    } catch (IllegalArgumentException ignored) {
+                        continue;
+                    }
+                    result.add(new TransactionRecord(
+                            rs.getLong("ts"), uuid, rs.getString("name"), rs.getString("type"),
+                            rs.getDouble("amount"), rs.getDouble("balance_after"),
+                            rs.getString("source"), rs.getString("detail")));
+                }
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized List<SourceVolume> volumeBySource(long since) throws Exception {
+        List<SourceVolume> result = new ArrayList<>();
+        // 用 CASE 在库里直接算进出，省得把整段流水拉回内存
+        String sql = "SELECT source,"
+                + " SUM(CASE WHEN type = 'DEPOSIT' THEN amount ELSE 0 END) AS inflow,"
+                + " SUM(CASE WHEN type = 'WITHDRAW' THEN amount ELSE 0 END) AS outflow,"
+                + " COUNT(*) AS cnt"
+                + " FROM " + transactionsTable() + " WHERE ts >= ?"
+                + " GROUP BY source ORDER BY cnt DESC";
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            statement.setLong(1, since);
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new SourceVolume(rs.getString("source"),
+                            rs.getDouble("inflow"), rs.getDouble("outflow"), rs.getLong("cnt")));
+                }
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized int pruneTransactions(long before) throws Exception {
+        String sql = "DELETE FROM " + transactionsTable() + " WHERE ts < ?";
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            statement.setLong(1, before);
+            return statement.executeUpdate();
+        }
+    }
+
+    @Override
+    public synchronized EconomySummary economySummary() throws Exception {
+        String sql = "SELECT COUNT(*) AS accounts, COALESCE(SUM(balance), 0) AS total,"
+                + " COALESCE(MAX(balance), 0) AS richest FROM " + usersTable();
+        try (PreparedStatement statement = connection().prepareStatement(sql);
+             ResultSet rs = statement.executeQuery()) {
+            if (!rs.next()) {
+                return EconomySummary.EMPTY;
+            }
+            long accounts = rs.getLong("accounts");
+            double total = rs.getDouble("total");
+            return new EconomySummary(accounts, total,
+                    accounts == 0 ? 0 : total / accounts, rs.getDouble("richest"));
         }
     }
 }

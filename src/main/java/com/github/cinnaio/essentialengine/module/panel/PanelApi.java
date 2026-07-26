@@ -4,8 +4,12 @@ import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.scheduler.MainThread;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
+import com.github.cinnaio.essentialengine.core.storage.EconomySummary;
+import com.github.cinnaio.essentialengine.core.storage.SourceVolume;
+import com.github.cinnaio.essentialengine.core.storage.TransactionRecord;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
+import com.github.cinnaio.essentialengine.module.economy.EconomyModule;
 import com.github.cinnaio.essentialengine.module.webapi.http.ApiResponse;
 import com.github.cinnaio.essentialengine.module.webapi.http.Router;
 import com.google.gson.JsonElement;
@@ -74,6 +78,14 @@ public class PanelApi {
 
         router.post("/api/players/{name}/action", (session, params) ->
                 playerAction(params.get("name"), Router.readJson(session)));
+
+        router.get("/api/economy", (session, params) -> {
+            try {
+                return ApiResponse.ok(MODULE, economy());
+            } catch (Exception error) {
+                return ApiResponse.error(MODULE, "读取经济数据失败: " + error.getMessage());
+            }
+        });
 
         router.get("/api/config", (session, params) -> ApiResponse.ok(MODULE, config.read()));
 
@@ -157,6 +169,69 @@ public class PanelApi {
             modules.add(item);
         }
         data.put("modules", modules);
+        return data;
+    }
+
+    // ------------------------------------------------------------------ 经济
+
+    /**
+     * 全服经济数据。走的是存储层的聚合查询，因此在 HTTP 线程上直接跑就行——
+     * 它不碰 Bukkit API，不需要回主线程。
+     */
+    private Map<String, Object> economy() throws Exception {
+        int days = Math.max(1, plugin.getConfig().getInt("modules.economy.stats-window-days", 7));
+        long since = System.currentTimeMillis() - days * 86_400_000L;
+
+        // 把内存里还没落盘的流水先刷下去，免得面板看到的数据比实际少一截
+        EconomyModule module = plugin.modules() != null && plugin.modules().isActive("economy")
+                ? (EconomyModule) plugin.modules().get("economy") : null;
+        if (module != null && module.getLedger() != null) {
+            module.getLedger().flush();
+        }
+
+        EconomySummary summary = plugin.storage().economySummary();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("accounts", summary.accounts());
+        data.put("total", summary.total());
+        data.put("average", summary.average());
+        data.put("richest", summary.richest());
+        data.put("windowDays", days);
+        data.put("symbol", plugin.economy() == null ? "" : plugin.economy().symbol());
+        data.put("tracking", module != null && module.getLedger() != null
+                && module.getLedger().isEnabled());
+
+        List<Map<String, Object>> sources = new ArrayList<>();
+        double inflow = 0;
+        double outflow = 0;
+        for (SourceVolume volume : plugin.storage().volumeBySource(since)) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("source", volume.source() == null || volume.source().isEmpty() ? "-" : volume.source());
+            item.put("in", volume.in());
+            item.put("out", volume.out());
+            item.put("count", volume.count());
+            sources.add(item);
+            inflow += volume.in();
+            outflow += volume.out();
+        }
+        data.put("sources", sources);
+        data.put("inflow", inflow);
+        data.put("outflow", outflow);
+
+        List<Map<String, Object>> recent = new ArrayList<>();
+        for (TransactionRecord record : plugin.storage().recentTransactions(null, 30)) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("ts", record.timestamp());
+            item.put("time", TimeUtil.formatDate(record.timestamp()));
+            item.put("player", record.name());
+            item.put("type", record.type());
+            item.put("amount", record.amount());
+            item.put("balanceAfter", record.balanceAfter());
+            item.put("source", record.source());
+            item.put("detail", record.detail());
+            recent.add(item);
+        }
+        data.put("recent", recent);
+        data.put("topBalances", plugin.storage().topBalances(10));
         return data;
     }
 

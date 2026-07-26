@@ -43,4 +43,33 @@ public interface StorageProvider {
 
     /** 写入全局数据。 */
     void saveGlobal(String key, Map<String, Object> value) throws Exception;
+
+    // ------------------------------------------------------------------ 经济流水
+    //
+    // 默认实现全部是空操作，这样新后端不实现也能跑（只是没有流水统计）。
+    // 内置的三个后端都做了真正的实现。
+
+    /** 批量追加流水。调用方会攒一批再写，不要在每笔交易时单独调用。 */
+    default void appendTransactions(List<TransactionRecord> records) throws Exception {
+    }
+
+    /** 最近的流水，按时间倒序。{@code player} 为 null 表示查全服。 */
+    default List<TransactionRecord> recentTransactions(UUID player, int limit) throws Exception {
+        return List.of();
+    }
+
+    /** 按来源汇总 {@code since} 之后的资金进出，按笔数倒序。 */
+    default List<SourceVolume> volumeBySource(long since) throws Exception {
+        return List.of();
+    }
+
+    /** 删除 {@code before} 之前的流水，返回删除条数。 */
+    default int pruneTransactions(long before) throws Exception {
+        return 0;
+    }
+
+    /** 全服余额总览。 */
+    default EconomySummary economySummary() throws Exception {
+        return EconomySummary.EMPTY;
+    }
 }

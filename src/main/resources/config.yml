@@ -179,6 +179,25 @@ modules:
     # /baltop 默认显示条数，以及玩家手动指定时的上限
     baltop-default-size: 10
     baltop-max-size: 50
+
+    # ---- 经济流水与统计 ----
+    # 因为本插件是 Vault 的经济提供者，商店 / 职业 / 任务这些插件的每一笔
+    # 扣款发钱都会流经这里，所以打开后能记录到「全服所有」资金变动，
+    # 而不只是本插件自己的命令。用 /eco stats 查看统计。
+    track-transactions: true
+    # 是否顺着调用栈识别是哪个插件发起的交易。关掉后所有外部交易都记成
+    # EssentialEngine，统计里就看不出钱是被哪个商店收走的了。
+    # 识别结果按类缓存，同一个插件只解析一次，开销很小。
+    track-sources: true
+    # 流水先攒在内存里，每隔多少秒批量落盘一次（不会在交易时同步写库）
+    transaction-flush-seconds: 15
+    # 内存队列上限。写满时丢弃最旧的记录，宁可少几条统计也不拖慢服务器
+    transaction-queue-limit: 10000
+    # 流水保留天数，超期的每小时清理一次
+    transaction-retention-days: 30
+    # /eco stats 的统计窗口天数，以及来源排行最多显示几条
+    stats-window-days: 7
+    stats-source-limit: 8
     # 是否把本插件注册为 Vault 的经济提供者（需要服务器安装 Vault）。
     # 注册发生在插件的 onLoad 阶段，也就是所有插件 onEnable 之前，
     # 因此商店 / 职业 / 任务这类插件在启动时一定能查到经济服务。

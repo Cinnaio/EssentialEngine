@@ -1,6 +1,7 @@
 package com.github.cinnaio.essentialengine.module.economy;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
+import com.github.cinnaio.essentialengine.core.storage.TransactionRecord;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 
 import java.math.BigDecimal;
@@ -16,9 +17,26 @@ import java.util.UUID;
 public class EconomyManager {
 
     private final EssentialEngine plugin;
+    /** 流水记账。经济模块启用后由它注入；为 null 时所有记账调用都是空操作。 */
+    private volatile EconomyLedger ledger;
 
     public EconomyManager(EssentialEngine plugin) {
         this.plugin = plugin;
+    }
+
+    public void setLedger(EconomyLedger ledger) {
+        this.ledger = ledger;
+    }
+
+    public EconomyLedger ledger() {
+        return ledger;
+    }
+
+    private void log(UUID uuid, UserData data, String type, double amount) {
+        EconomyLedger current = ledger;
+        if (current != null) {
+            current.record(uuid, data.getName(), type, amount, data.getBalance());
+        }
     }
 
     public String symbol() {
@@ -66,6 +84,7 @@ public class EconomyManager {
         }
         data.setBalance(round(data.getBalance() - amount));
         persist(uuid, data);
+        log(uuid, data, TransactionRecord.WITHDRAW, round(amount));
         return true;
     }
 
@@ -76,6 +95,7 @@ public class EconomyManager {
         }
         data.setBalance(round(data.getBalance() + amount));
         persist(uuid, data);
+        log(uuid, data, TransactionRecord.DEPOSIT, round(amount));
     }
 
     public void set(UUID uuid, double amount) {
@@ -83,8 +103,11 @@ public class EconomyManager {
         if (data == null) {
             return;
         }
+        double before = data.getBalance();
         data.setBalance(round(amount));
         persist(uuid, data);
+        // SET 记的是变动幅度，方向不确定，因此不计入进出统计
+        log(uuid, data, TransactionRecord.SET, Math.abs(round(amount) - before));
     }
 
     /** 离线玩家改完余额要立刻落盘，在线玩家交给自动保存即可。 */

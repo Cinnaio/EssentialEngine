@@ -80,6 +80,24 @@ public class MysqlStorage extends SqlStorage {
     }
 
     @Override
+    protected String createTransactionsTableSql() {
+        // MySQL 不支持 CREATE INDEX IF NOT EXISTS，索引直接写在建表语句里
+        return "CREATE TABLE IF NOT EXISTS " + transactionsTable() + " ("
+                + "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
+                + "ts BIGINT NOT NULL,"
+                + "uuid VARCHAR(36) NOT NULL,"
+                + "name VARCHAR(32) NOT NULL DEFAULT '',"
+                + "type VARCHAR(16) NOT NULL,"
+                + "amount DOUBLE NOT NULL DEFAULT 0,"
+                + "balance_after DOUBLE NOT NULL DEFAULT 0,"
+                + "source VARCHAR(64) NOT NULL DEFAULT '',"
+                + "detail VARCHAR(128) NOT NULL DEFAULT '',"
+                + "INDEX idx_tx_ts (ts),"
+                + "INDEX idx_tx_uuid (uuid)"
+                + ") DEFAULT CHARSET=utf8mb4";
+    }
+
+    @Override
     protected String upsertUserSql() {
         return "INSERT INTO " + usersTable() + " (uuid, name, balance, data) VALUES (?, ?, ?, ?) "
                 + "ON DUPLICATE KEY UPDATE name = VALUES(name), balance = VALUES(balance), data = VALUES(data)";
