@@ -9,6 +9,7 @@ import com.github.cinnaio.essentialengine.module.webapi.http.Router;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * 网页管理面板模块。
@@ -90,6 +91,7 @@ public class PanelModule extends EngineModule {
         }
         this.oidc = client;
         plugin.getLogger().info("[Panel] OAuth 登录已启用，回调地址: " + client.redirectUri());
+        announceAccessPolicy();
 
         // 后台预热发现文档与 JWKS：让第一个登录的人不必等这两趟出站请求，
         // 也能在开服日志里就发现 issuer 配错 / 皮肤站没起来，而不是等有人登录才暴露。
@@ -102,6 +104,34 @@ public class PanelModule extends EngineModule {
                 plugin.getLogger().warning("[Panel] 连接 OAuth 授权服务器失败，登录时会重试: " + error.getMessage());
             }
         });
+    }
+
+    /**
+     * 开服时把「谁能进面板」这条结论直接打进日志。
+     *
+     * <p>{@code allowed-users} 一旦非空就以名单为准，{@code require-admin} 不再参与判断。
+     * 这个语义在 config.yml 的注释里写了，但人配完就不会再回头看注释——
+     * 尤其容易踩的是：以为填名单是在 {@code require-admin} 的基础上「再收窄一层」，
+     * 实际上是把它整个替换掉了，于是名单里的非管理员也能进。</p>
+     *
+     * <p>与其改语义（那会让现在靠名单进面板的非管理员在升级后突然被挡在外面，
+     * 而且报错只说「无权访问」，没人猜得到是插件语义变了），不如在开服这一刻
+     * 把实际生效的规则说清楚，配错的人当场就能发现。</p>
+     */
+    private void announceAccessPolicy() {
+        List<String> allowlist = plugin.getConfig().getStringList(path("oauth.allowed-users"));
+        long named = allowlist.stream().filter(entry -> entry != null && !entry.isBlank()).count();
+        boolean requireAdmin = cfgBool("oauth.require-admin", true);
+
+        if (named > 0) {
+            plugin.getLogger().info("[Panel] 准入规则：仅 allowed-users 名单内的 " + named + " 人可登录"
+                    + (requireAdmin ? "；已配置名单，require-admin 不再生效" : ""));
+        } else if (requireAdmin) {
+            plugin.getLogger().info("[Panel] 准入规则：仅身份源中的管理员可登录");
+        } else {
+            plugin.getLogger().warning("[Panel] 准入规则：身份源里的任何账号都能登录面板。"
+                    + "若非本意，请开启 require-admin 或填写 allowed-users。");
+        }
     }
 
     /**
