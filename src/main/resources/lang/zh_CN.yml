@@ -3,9 +3,11 @@
 #
 #  · 颜色使用 MiniMessage 命名标签，走原版 Minecraft 配色，约定：
 #      正文 <white>   次要 <gray>   弱化 <dark_gray>
-#      失败 <red>   警告 <yellow>   标题 <aqua>
+#      失败 <red>   警告 <yellow>   标题 <aqua>   金额 <gold>
 #      成功消息：句子 <white>、其中的数值 / 名字用 <green> 强调；
 #      没有数值的纯确认短句整句 <green>
+#      经济类消息走黄金搭配：玩家名 <yellow>、金额 <gold>
+#      <green> 和 <yellow> 不要出现在同一条消息里（黄配金、绿配白）
 #  · 占位符写作 {name}，发送时自动替换
 #  · 把某条消息的值改成空字符串 "" 即可让插件不再发送它
 #  · 玩家看到哪份语言文件由其客户端语言决定（zh_* → 本文件，
@@ -90,8 +92,8 @@ teleport:
 
   self: "<red>你不能对自己这么做。"
   request-sent: "<white>已向 <green>{player} <white>发送传送请求，60 秒内有效。"
-  request-received: "<green>{player} <yellow>想传送到你这里。 <white>/tpaccept <gray>接受 <red>/tpdeny <gray>拒绝"
-  request-received-here: "<green>{player} <yellow>希望你传送过去。 <white>/tpaccept <gray>接受 <red>/tpdeny <gray>拒绝"
+  request-received: "<gold>{player} <yellow>想传送到你这里。 <white>/tpaccept <gray>接受 <red>/tpdeny <gray>拒绝"
+  request-received-here: "<gold>{player} <yellow>希望你传送过去。 <white>/tpaccept <gray>接受 <red>/tpdeny <gray>拒绝"
   request-none: "<red>你现在没有待处理的传送请求。"
   request-expired: "<red>对方已经离线，请求失效。"
   request-accepted: "<white>已接受 <green>{player} <white>的传送请求。"
@@ -226,33 +228,33 @@ admin:
   label-mute: "<red>禁言"
 
 economy:
-  balance-self: "<gray>你的余额: <green>{balance}"
-  balance-other: "<green>{player} <gray>的余额: <white>{balance}"
+  balance-self: "<gray>你的余额: <gold>{balance}"
+  balance-other: "<yellow>{player} <gray>的余额: <gold>{balance}"
   amount-positive: "<red>金额必须大于 0。"
-  amount-too-small: "<red>单次转账不能少于 {min}。"
-  amount-too-large: "<red>单次转账不能超过 {max}。"
+  amount-too-small: "<red>单次转账不能少于 <gold>{min}<red>。"
+  amount-too-large: "<red>单次转账不能超过 <gold>{max}<red>。"
   stats-header: "<aqua>全服经济统计"
-  stats-total: "<dark_gray> - <gray>流通总量: <white>{value}"
+  stats-total: "<dark_gray> - <gray>流通总量: <gold>{value}"
   stats-accounts: "<dark_gray> - <gray>账户数: <white>{value}"
-  stats-average: "<dark_gray> - <gray>人均余额: <white>{value}"
-  stats-richest: "<dark_gray> - <gray>最高余额: <white>{value}"
+  stats-average: "<dark_gray> - <gray>人均余额: <gold>{value}"
+  stats-richest: "<dark_gray> - <gray>最高余额: <gold>{value}"
   stats-flow: "<dark_gray> - <gray>近 {days} 天: <white>+{in} <dark_gray>/ <red>-{out} <dark_gray>(净 <green>{net}<dark_gray>)"
   stats-sources: "<aqua>资金来源排行 <dark_gray>(笔数 / 流入 / 流出)"
   stats-source-entry: "<dark_gray> - <green>{source} <dark_gray>{count} 笔 <white>+{in} <red>-{out}"
   stats-no-data: "<gray>这段时间还没有流水记录。"
   stats-tracking-off: "<gray>流水记录已关闭，只能统计余额；开启 track-transactions 后可看资金流向。"
   pay-cooldown: "<red>转账冷却中，还需等待 <white>{time}<red>。"
-  target-balance-full: "<red>{player} 的余额已达上限 <white>{max}<red>。"
-  not-enough: "<red>余额不足，你当前只有 <white>{balance}<red>。"
+  target-balance-full: "<red>{player} 的余额已达上限 <gold>{max}<red>。"
+  not-enough: "<red>余额不足，你当前只有 <gold>{balance}<red>。"
   pay-self: "<red>不能给自己转账。"
-  pay-sent: "<white>已向 <green>{player} <white>转账 <yellow>{amount}<white>。"
-  pay-received: "<white>收到来自 <green>{player} <white>的 <yellow>{amount}<white>。"
-  eco-done: "<green>{player} 的余额现在是 <yellow>{balance}<green>。"
-  balance-changed: "<yellow>你的余额已变更为 <green>{balance}<yellow>。"
+  pay-sent: "<white>已向 <yellow>{player} <white>转账 <gold>{amount}<white>。"
+  pay-received: "<white>收到来自 <yellow>{player} <white>的 <gold>{amount}<white>。"
+  eco-done: "<yellow>{player} <white>的余额现在是 <gold>{balance}<white>。"
+  balance-changed: "<yellow>你的余额已变更为 <gold>{balance}<yellow>。"
   baltop-empty: "<gray>暂时还没有余额数据。"
   baltop-header: "<aqua>余额排行榜 <dark_gray>(前 {count} 名)"
-  baltop-entry: "<dark_gray> #{rank} <green>{player} <gray>- <white>{balance}"
-  starting-balance: "<green>欢迎！已发放初始资金 <yellow>{balance}<green>。"
+  baltop-entry: "<dark_gray> #{rank} <yellow>{player} <gray>- <gold>{balance}"
+  starting-balance: "<yellow>欢迎！<white>已发放初始资金 <gold>{balance}<white>。"
   kit-not-found: "<red>找不到套装: <white>{name}"
   kit-once: "<red>套装 <white>{name} <red>每人只能领取一次。"
   kit-cooldown: "<red>套装 <white>{name} <red>冷却中，还需 <white>{time}<red>。"

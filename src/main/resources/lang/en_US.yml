@@ -3,9 +3,11 @@
 #
 #  · Colours use MiniMessage named tags with the vanilla Minecraft palette:
 #      body <white>   secondary <gray>   muted <dark_gray>
-#      error <red>   warning <yellow>   heading <aqua>
+#      error <red>   warning <yellow>   heading <aqua>   money <gold>
 #      success messages: <white> sentence with <green> highlights on the
 #      values; short confirmations with no value stay fully <green>
+#      economy messages pair yellow with gold: names <yellow>, money <gold>
+#      never mix <green> and <yellow> in one message (yellow+gold, green+white)
 #  · Placeholders look like {name} and are replaced on send
 #  · Set a message to "" to silence it entirely
 #  · Which file a player sees follows their client language
@@ -91,8 +93,8 @@ teleport:
 
   self: "<red>You can't do that to yourself."
   request-sent: "<white>Teleport request sent to <green>{player}<white>. Expires in 60 seconds."
-  request-received: "<green>{player} <yellow>wants to teleport to you. <white>/tpaccept <gray>or <red>/tpdeny"
-  request-received-here: "<green>{player} <yellow>wants you to teleport to them. <white>/tpaccept <gray>or <red>/tpdeny"
+  request-received: "<gold>{player} <yellow>wants to teleport to you. <white>/tpaccept <gray>or <red>/tpdeny"
+  request-received-here: "<gold>{player} <yellow>wants you to teleport to them. <white>/tpaccept <gray>or <red>/tpdeny"
   request-none: "<red>You have no pending teleport requests."
   request-expired: "<red>That player is no longer online."
   request-accepted: "<white>Accepted <green>{player}<white>'s request."
@@ -227,33 +229,33 @@ admin:
   label-mute: "<red>Muted"
 
 economy:
-  balance-self: "<gray>Balance: <green>{balance}"
-  balance-other: "<green>{player}<gray>'s balance: <white>{balance}"
+  balance-self: "<gray>Balance: <gold>{balance}"
+  balance-other: "<yellow>{player}<gray>'s balance: <gold>{balance}"
   amount-positive: "<red>Amount must be greater than 0."
-  amount-too-small: "<red>Minimum payment is {min}."
-  amount-too-large: "<red>Maximum payment is {max}."
+  amount-too-small: "<red>Minimum payment is <gold>{min}<red>."
+  amount-too-large: "<red>Maximum payment is <gold>{max}<red>."
   stats-header: "<aqua>Server economy"
-  stats-total: "<dark_gray> - <gray>In circulation: <white>{value}"
+  stats-total: "<dark_gray> - <gray>In circulation: <gold>{value}"
   stats-accounts: "<dark_gray> - <gray>Accounts: <white>{value}"
-  stats-average: "<dark_gray> - <gray>Average: <white>{value}"
-  stats-richest: "<dark_gray> - <gray>Richest: <white>{value}"
+  stats-average: "<dark_gray> - <gray>Average: <gold>{value}"
+  stats-richest: "<dark_gray> - <gray>Richest: <gold>{value}"
   stats-flow: "<dark_gray> - <gray>Last {days}d: <white>+{in} <dark_gray>/ <red>-{out} <dark_gray>(net <green>{net}<dark_gray>)"
   stats-sources: "<aqua>By source <dark_gray>(count / in / out)"
   stats-source-entry: "<dark_gray> - <green>{source} <dark_gray>{count}x <white>+{in} <red>-{out}"
   stats-no-data: "<gray>No transactions recorded in this period."
   stats-tracking-off: "<gray>Transaction tracking is off; enable track-transactions to see money flow."
   pay-cooldown: "<red>Payment on cooldown, wait <white>{time}<red>."
-  target-balance-full: "<red>{player} has reached the balance cap of <white>{max}<red>."
-  not-enough: "<red>Not enough money. You have <white>{balance}<red>."
+  target-balance-full: "<red>{player} has reached the balance cap of <gold>{max}<red>."
+  not-enough: "<red>Not enough money. You have <gold>{balance}<red>."
   pay-self: "<red>You can't pay yourself."
-  pay-sent: "<white>Sent <yellow>{amount} <white>to <green>{player}<white>."
-  pay-received: "<white>Received <yellow>{amount} <white>from <green>{player}<white>."
-  eco-done: "<green>{player}'s balance is now <yellow>{balance}<green>."
-  balance-changed: "<yellow>Your balance is now <green>{balance}<yellow>."
+  pay-sent: "<white>Sent <gold>{amount} <white>to <yellow>{player}<white>."
+  pay-received: "<white>Received <gold>{amount} <white>from <yellow>{player}<white>."
+  eco-done: "<yellow>{player}<white>'s balance is now <gold>{balance}<white>."
+  balance-changed: "<yellow>Your balance is now <gold>{balance}<yellow>."
   baltop-empty: "<gray>No balance data yet."
   baltop-header: "<aqua>Top balances <dark_gray>(top {count})"
-  baltop-entry: "<dark_gray> #{rank} <green>{player} <gray>- <white>{balance}"
-  starting-balance: "<green>Welcome! You received <yellow>{balance} <green>to get started."
+  baltop-entry: "<dark_gray> #{rank} <yellow>{player} <gray>- <gold>{balance}"
+  starting-balance: "<yellow>Welcome! <white>You received <gold>{balance} <white>to get started."
   kit-not-found: "<red>No kit named <white>{name}<red>."
   kit-once: "<red>Kit <white>{name} <red>can only be claimed once."
   kit-cooldown: "<red>Kit <white>{name} <red>is on cooldown, <white>{time} <red>remaining."

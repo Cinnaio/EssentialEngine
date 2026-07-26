@@ -28,9 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class LangPaletteTest {
 
-    /** 约定的原版配色：正文 white / 次要 gray / 弱化 dark_gray / 强调 green red yellow aqua。 */
+    /**
+     * 约定的原版配色：正文 white / 次要 gray / 弱化 dark_gray /
+     * 强调 green red yellow aqua / 金额 gold。
+     */
     private static final Set<String> ALLOWED_COLORS = Set.of(
-            "white", "gray", "dark_gray", "green", "red", "yellow", "aqua");
+            "white", "gray", "dark_gray", "green", "red", "yellow", "aqua", "gold");
 
     /** 原版全部 16 色。出现在这里但不在 ALLOWED_COLORS 里的就是约定外用色。 */
     private static final Set<String> ALL_VANILLA = Set.of(
@@ -82,6 +85,22 @@ class LangPaletteTest {
             for (String value : values) {
                 assertTrue(!value.contains("<#"),
                         file + " 仍有十六进制色: " + value);
+            }
+        }
+    }
+
+    /**
+     * 绿与黄不同句——这是配色的搭配规则：黄配金（经济类消息），绿配白（成功类消息）。
+     * 两种高亮色挤在一句话里会互相打架，这正是当初提出这条规则的原因。
+     */
+    @Test
+    void 绿色与黄色不出现在同一条消息里() throws Exception {
+        for (String file : new String[]{"zh_CN.yml", "en_US.yml"}) {
+            List<String> values = new ArrayList<>();
+            flatten(load(file), "", new TreeSet<>(), values);
+            for (String value : values) {
+                assertTrue(!(value.contains("<green>") && value.contains("<yellow>")),
+                        file + " 绿黄同句: " + value);
             }
         }
     }
