@@ -7,6 +7,7 @@ import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.storage.EconomySummary;
 import com.github.cinnaio.essentialengine.core.storage.SourceVolume;
 import com.github.cinnaio.essentialengine.core.storage.TransactionRecord;
+import com.github.cinnaio.essentialengine.core.storage.UserSummary;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
 import com.github.cinnaio.essentialengine.module.economy.EconomyModule;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -102,6 +104,43 @@ public class PanelApi {
 
         router.post("/api/players/{name}/action", (session, params) ->
                 playerAction(params.get("name"), Router.readJson(session)));
+
+        // 下面三个都会读存储（可能是网络上的 MySQL），但它们跑在 HTTP 工作线程上，
+        // 不碰 Bukkit API，所以不需要也不应该回主线程
+        router.get("/api/players/search", (session, params) -> {
+            String query = session.getParms().getOrDefault("q", "");
+            if (query.isBlank()) {
+                return ApiResponse.ok(MODULE, List.of());
+            }
+            try {
+                return ApiResponse.ok(MODULE, searchPlayers(query));
+            } catch (Exception error) {
+                return ApiResponse.error(MODULE, "搜索玩家失败: " + error.getMessage());
+            }
+        });
+
+        router.get("/api/players/{name}/detail", (session, params) -> {
+            try {
+                Map<String, Object> detail = playerDetail(params.get("name"));
+                return detail == null
+                        ? ApiResponse.error(MODULE, "找不到玩家: " + params.get("name"))
+                        : ApiResponse.ok(MODULE, detail);
+            } catch (Exception error) {
+                return ApiResponse.error(MODULE, "读取玩家数据失败: " + error.getMessage());
+            }
+        });
+
+        router.get("/api/players/{name}/ledger", (session, params) -> {
+            try {
+                List<Map<String, Object>> ledger = playerLedger(params.get("name"),
+                        parseLimit(session.getParms().get("limit"), 50));
+                return ledger == null
+                        ? ApiResponse.error(MODULE, "找不到玩家: " + params.get("name"))
+                        : ApiResponse.ok(MODULE, ledger);
+            } catch (Exception error) {
+                return ApiResponse.error(MODULE, "读取流水失败: " + error.getMessage());
+            }
+        });
 
         router.get("/api/economy", (session, params) -> {
             try {
@@ -288,6 +327,142 @@ public class PanelApi {
             result.add(item);
         }
         return result;
+    }
+
+    // ------------------------------------------------------------------ 离线玩家
+
+    /**
+     * 按名字解析 UUID，在线离线都能查到。
+     *
+     * <p>先查存储的名字索引（纯 IO，可以在 HTTP 线程上跑），查不到再回主线程问一次
+     * 在线列表——刚进服还没写过盘的新人只存在于内存里。顺序反过来的话，
+     * 每次搜索都要往主线程排队，面板一刷新就会拖慢游戏。</p>
+     */
+    private UUID resolvePlayer(String name) throws Exception {
+        if (name == null || !USERNAME.matcher(name).matches()) {
+            return null;
+        }
+        UUID uuid = plugin.storage().lookupUuid(name);
+        if (uuid != null) {
+            return uuid;
+        }
+        return MainThread.call(plugin, () -> {
+            Player online = Bukkit.getPlayerExact(name);
+            return online == null ? null : online.getUniqueId();
+        }, null);
+    }
+
+    private List<Map<String, Object>> searchPlayers(String query) throws Exception {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (UserSummary summary : plugin.storage().searchUsers(query, 30)) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", summary.name());
+            item.put("uuid", summary.uuid().toString());
+            item.put("balance", summary.balance());
+            // 在线状态由前端拿玩家列表自行标注，这里不为每条结果去挤主线程
+            result.add(item);
+        }
+        return result;
+    }
+
+    /** 单个玩家的完整档案，离线玩家会从存储里读出来。 */
+    private Map<String, Object> playerDetail(String name) throws Exception {
+        UUID uuid = resolvePlayer(name);
+        if (uuid == null) {
+            return null;
+        }
+        UserData data = plugin.users().loadOffline(uuid);
+        if (data == null) {
+            return null;
+        }
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("name", data.getName());
+        item.put("uuid", uuid.toString());
+        item.put("nickname", data.getNickname());
+        item.put("balance", data.getBalance());
+        item.put("firstJoin", data.getFirstJoin());
+        item.put("firstJoinText", data.getFirstJoin() <= 0 ? "-" : TimeUtil.formatDate(data.getFirstJoin()));
+        item.put("lastSeen", data.getLastSeen());
+        item.put("lastSeenText", data.getLastSeen() <= 0 ? "-" : TimeUtil.formatDate(data.getLastSeen()));
+        item.put("playtime", plugin.messages().resolve(null, TimeUtil.duration(data.getTotalPlaytime())));
+        item.put("homes", data.getHomeCount());
+
+        item.put("banned", data.isBanned());
+        item.put("banReason", data.getBanReason());
+        item.put("banSource", data.getBanSource());
+        item.put("banExpiry", data.getBanExpiry());
+        item.put("banExpiryText", banExpiryText(data.isBanned(), data.getBanExpiry()));
+        item.put("muted", data.isMuted());
+        item.put("muteReason", data.getMuteReason());
+        item.put("muteSource", data.getMuteSource());
+        item.put("muteExpiry", data.getMuteExpiry());
+        item.put("muteExpiryText", banExpiryText(data.isMuted(), data.getMuteExpiry()));
+
+        // 在线信息只有主线程才拿得到；玩家不在线时这一趟直接返回 null
+        Map<String, Object> live = MainThread.call(plugin, () -> {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null) {
+                return null;
+            }
+            Map<String, Object> online = new LinkedHashMap<>();
+            online.put("ping", player.getPing());
+            online.put("world", player.getWorld().getName());
+            online.put("gamemode", player.getGameMode().name());
+            online.put("health", Math.round(player.getHealth()));
+            online.put("op", player.isOp());
+            return online;
+        }, null);
+        item.put("online", live != null);
+        item.put("live", live);
+        return item;
+    }
+
+    /** 封禁 / 禁言到期时间的展示文案。 */
+    private String banExpiryText(boolean active, long expiry) {
+        if (!active) {
+            return "-";
+        }
+        return expiry <= 0 ? "永久" : TimeUtil.formatDate(expiry);
+    }
+
+    /** 某个玩家的经济流水。 */
+    private List<Map<String, Object>> playerLedger(String name, int limit) throws Exception {
+        UUID uuid = resolvePlayer(name);
+        if (uuid == null) {
+            return null;
+        }
+        // 内存里攒着的那批还没落盘，不先刷一下的话最近几笔看不到
+        EconomyModule module = plugin.modules() != null && plugin.modules().isActive("economy")
+                ? (EconomyModule) plugin.modules().get("economy") : null;
+        if (module != null && module.getLedger() != null) {
+            module.getLedger().flush();
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (TransactionRecord record : plugin.storage().recentTransactions(uuid, limit)) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("ts", record.timestamp());
+            item.put("time", TimeUtil.formatDate(record.timestamp()));
+            item.put("type", record.type());
+            item.put("amount", record.amount());
+            item.put("balanceAfter", record.balanceAfter());
+            item.put("source", record.source());
+            item.put("detail", record.detail());
+            result.add(item);
+        }
+        return result;
+    }
+
+    private static int parseLimit(String raw, int fallback) {
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Math.max(1, Math.min(200, Integer.parseInt(raw.trim())));
+        } catch (NumberFormatException error) {
+            return fallback;
+        }
     }
 
     /**

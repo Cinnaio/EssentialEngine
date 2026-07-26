@@ -38,6 +38,16 @@ public interface StorageProvider {
     /** 余额排行榜，返回顺序即名次。key 为玩家名。 */
     LinkedHashMap<String, Double> topBalances(int limit) throws Exception;
 
+    /**
+     * 按名字片段搜索玩家（含离线），不区分大小写，按名字排序。
+     *
+     * <p>{@code query} 为空时返回空列表——「列出全部玩家」对老服来说是几万条，
+     * 没有分页的接口不该提供这种能力。</p>
+     */
+    default List<UserSummary> searchUsers(String query, int limit) throws Exception {
+        return List.of();
+    }
+
     /** 读取全局数据（如 warps、spawn），不存在时返回 null。 */
     Map<String, Object> loadGlobal(String key) throws Exception;
 

@@ -182,6 +182,35 @@ public class YamlStorage implements StorageProvider {
     }
 
     @Override
+    public List<UserSummary> searchUsers(String query, int limit) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        String needle = query.trim().toLowerCase(Locale.ROOT);
+        // 先只在内存的名字索引里筛，命中之后才去读档案拿余额——
+        // 老服的玩家档案有几万份，挨个读盘再过滤会把面板卡死
+        List<Map.Entry<UUID, String>> hits = new ArrayList<>();
+        for (Map.Entry<UUID, String> entry : nameByUuid.entrySet()) {
+            if (entry.getValue().toLowerCase(Locale.ROOT).contains(needle)) {
+                hits.add(entry);
+            }
+        }
+        hits.sort(Comparator.comparing(Map.Entry::getValue, String.CASE_INSENSITIVE_ORDER));
+
+        List<UserSummary> result = new ArrayList<>();
+        for (Map.Entry<UUID, String> hit : hits) {
+            if (result.size() >= Math.max(1, limit)) {
+                break;
+            }
+            Map<String, Object> data = loadUser(hit.getKey());
+            double balance = data != null && data.get("balance") instanceof Number number
+                    ? number.doubleValue() : 0D;
+            result.add(new UserSummary(hit.getKey(), hit.getValue(), balance));
+        }
+        return result;
+    }
+
+    @Override
     public LinkedHashMap<String, Double> topBalances(int limit) {
         List<Map.Entry<String, Double>> entries = new ArrayList<>();
         for (UUID uuid : allUsers()) {

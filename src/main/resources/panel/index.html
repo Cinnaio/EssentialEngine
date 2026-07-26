@@ -303,6 +303,89 @@ input:-webkit-autofill:focus{
 .pcard .who b{ font-size:17px; font-weight:590; letter-spacing:-.3px; }
 .pcard .meta{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
 .pcard .acts{ display:flex; gap:7px; flex-wrap:wrap; }
+.pcard.tap{ cursor:pointer; transition:transform .18s var(--spring), box-shadow .18s; }
+.pcard.tap:hover{ transform:translateY(-1px); box-shadow:0 4px 18px rgba(0,0,0,.09); }
+.pcard.tap:active{ transform:scale(.995); }
+
+/* iOS 搜索框：左侧放大镜、右侧一键清空 */
+.search{ position:relative; display:flex; align-items:center; }
+.search svg{ position:absolute; left:12px; width:16px; height:16px; color:var(--text-3);
+  pointer-events:none; }
+.search input{ padding-left:36px; padding-right:36px; }
+.search .clr{ position:absolute; right:9px; width:20px; height:20px; border:0; padding:0;
+  border-radius:50%; background:var(--track); color:#fff; cursor:pointer; display:none;
+  align-items:center; justify-content:center; font-size:13px; line-height:1; }
+.search.has .clr{ display:flex; }
+.sub{ font-size:12.5px; color:var(--text-3); margin:10px 2px 0; }
+
+/* ---- 玩家详情抽屉 ----
+   在线列表放得下的信息有限，而离线玩家的封禁状态、流水这些才是管理时真正要看的。
+   用从右侧滑出的抽屉：不打断列表，也不用跳页面。窄屏改成从底部升起，
+   贴合手机上的 sheet 习惯。 */
+#sheet{ position:fixed; inset:0; z-index:80; display:none; }
+#sheet.on{ display:block; }
+#sheet .scrim{ position:absolute; inset:0; background:rgba(0,0,0,.26);
+  opacity:0; transition:opacity .34s var(--spring); }
+#sheet.in .scrim{ opacity:1; }
+.sheet-card{
+  position:absolute; top:0; right:0; bottom:0; width:min(470px,100%);
+  background:var(--bg); display:flex; flex-direction:column;
+  box-shadow:-10px 0 46px rgba(0,0,0,.17);
+  transform:translateX(100%); transition:transform .4s var(--spring);
+}
+#sheet.in .sheet-card{ transform:none; }
+.sheet-top{
+  flex:none; display:flex; align-items:center; gap:12px; padding:16px 18px;
+  background:rgba(255,255,255,.86);
+  backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
+  box-shadow: inset 0 -1px 0 var(--hairline);
+}
+.sheet-top .id{ flex:1; min-width:0; }
+.sheet-top .id b{ font-size:19px; font-weight:640; letter-spacing:-.4px; display:block;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sheet-top .id .meta{ display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.sheet-x{ flex:none; width:30px; height:30px; border:0; border-radius:50%; cursor:pointer;
+  background:var(--track); color:var(--text-2); font-size:15px; line-height:1;
+  display:grid; place-items:center; }
+.sheet-x:hover{ background:rgba(120,120,128,.26); }
+/* minmax(0,1fr) 不能省：默认的 auto 列会被 UUID 这种不可断行的长串
+   撑到 max-content，整个抽屉跟着横向溢出。 */
+.sheet-body{ flex:1; overflow-y:auto; padding:18px; display:grid; gap:16px;
+  grid-template-columns:minmax(0,1fr); align-content:start; }
+.sheet-body h4{ font-size:12.5px; font-weight:590; color:var(--text-2);
+  text-transform:uppercase; letter-spacing:.04em; margin:0 4px 8px; }
+
+/* 详情里的信息表：左标签右值，值用等宽数字 */
+.kv{ background:var(--card); border-radius:var(--radius-md); overflow:hidden;
+  box-shadow:var(--shadow); }
+.kv .r{ display:flex; align-items:center; gap:14px; padding:11px 15px; position:relative;
+  font-size:14.5px; }
+.kv .r::before{ content:""; position:absolute; top:0; left:15px; right:0; height:1px;
+  background:var(--hairline); }
+.kv .r:first-child::before{ display:none; }
+.kv .r .k{ flex:1; min-width:0; color:var(--text-2); font-weight:400; }
+.kv .r .v{ flex:none; min-width:0; max-width:62%; text-align:right; font-weight:510;
+  font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.kv .r .v.bad{ color:var(--danger); }
+/* UUID 这类长值截断了等于没显示，改成上下排列、整串折行 */
+.kv .r.col{ flex-direction:column; align-items:stretch; gap:3px; }
+.kv .r.col .v{ max-width:100%; text-align:left; white-space:normal; word-break:break-all;
+  font-family:var(--font-mono); font-size:12px; font-weight:400; color:var(--text-2); }
+.sheet-acts{ display:flex; gap:7px; flex-wrap:wrap; }
+/* 抽屉比经济页窄得多，流水行沿用那边的百分比列宽会把时间挤没，
+   这里改成固定像素重新分配。 */
+.tx.mini{ gap:8px; }
+.tx.mini .t{ width:82px; }
+.tx.mini .a{ width:84px; }
+.tx.mini .p{ width:74px; color:var(--text-2); font-weight:400; }
+
+@media (max-width:640px){
+  .sheet-card{ top:auto; left:0; width:100%; height:min(88%,100%);
+    border-radius:var(--radius-xl) var(--radius-xl) 0 0; overflow:hidden;
+    transform:translateY(100%); }
+  #sheet.in .sheet-card{ transform:none; }
+}
 
 /* ============================ 经济 ============================ */
 /* 来源占比：用一条横向条形表达各来源的笔数占比，比纯数字直观 */
@@ -468,6 +551,16 @@ input:-webkit-autofill:focus{
         <div><h2>玩家</h2><p id="pCount">—</p></div>
         <button class="btn" id="refreshPlayers">刷新</button>
       </div>
+      <div class="search" id="pSearchBox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>
+        </svg>
+        <input id="pSearch" type="text" placeholder="搜索玩家（含离线）"
+               autocomplete="off" spellcheck="false">
+        <button class="clr" id="pSearchClear" type="button" aria-label="清空搜索">✕</button>
+      </div>
+      <p class="sub" id="pHint">列表显示在线玩家。要查离线玩家的余额、封禁状态或流水，在上面搜名字。</p>
       <div class="plist" id="plist"></div>
     </section>
 
@@ -488,6 +581,21 @@ input:-webkit-autofill:focus{
       </div>
     </section>
   </main>
+</div>
+
+<!-- 玩家详情抽屉 -->
+<div id="sheet" role="dialog" aria-modal="true" aria-labelledby="shName">
+  <div class="scrim" id="sheetScrim"></div>
+  <div class="sheet-card">
+    <div class="sheet-top">
+      <div class="id">
+        <b id="shName">—</b>
+        <div class="meta" id="shChips"></div>
+      </div>
+      <button class="sheet-x" id="sheetClose" type="button" aria-label="关闭">✕</button>
+    </div>
+    <div class="sheet-body" id="shBody"></div>
+  </div>
 </div>
 
 <div class="toast glass" id="toast"></div>
@@ -871,8 +979,105 @@ async function act(name, action, extra){
     await api("/players/" + encodeURIComponent(name) + "/action", "POST",
       Object.assign({ action }, extra || {}));
     toast("操作已执行");
-    loadPlayers();
+    // 操作可能改变封禁 / 余额，列表和已打开的详情都要跟着更新
+    refreshPlayerViews();
   }catch(err){ toast(err.message, true); }
+}
+
+function refreshPlayerViews(){
+  if (pQuery) runSearch(pQuery); else loadPlayers();
+  if (sheetName) openSheet(sheetName, true);
+}
+
+/* 一个玩家能执行的管理动作。列表卡片和详情抽屉共用，
+   免得两处各写一遍、改了一处忘了另一处。 */
+function playerActions(p, host){
+  const add = (text, kind, handler) => {
+    const b = document.createElement("button");
+    b.className = "btn sm" + (kind ? " " + kind : "");
+    b.textContent = text;
+    b.addEventListener("click", ev => { ev.stopPropagation(); handler(); });
+    host.append(b);
+  };
+
+  if (p.online !== false){
+    add("踢出", "danger", async () => {
+      const reason = await ask({ title: "踢出 " + p.name, input: true,
+        placeholder: "理由（可留空）", confirmText: "踢出", danger: true });
+      if (reason !== null) act(p.name, "kick", { reason });
+    });
+  }
+  if (p.banned){
+    add("解封", "", () => act(p.name, "unban"));
+  }else{
+    add("封禁", "danger", async () => {
+      const reason = await ask({ title: "封禁 " + p.name,
+        message: "玩家会被立即踢下线，且无法再进入服务器。", input: true,
+        placeholder: "理由（可留空）", confirmText: "封禁", danger: true });
+      if (reason !== null) act(p.name, "ban", { reason });
+    });
+    add("临时封禁", "danger", async () => {
+      const duration = await ask({ title: "临时封禁 " + p.name,
+        message: "时长必须带单位，例如 30m、2h、7d。", input: true,
+        placeholder: "7d", confirmText: "下一步", danger: true });
+      if (duration === null || !String(duration).trim()) return;
+      const reason = await ask({ title: "封禁理由", input: true,
+        placeholder: "理由（可留空）", confirmText: "封禁", danger: true });
+      if (reason !== null) act(p.name, "tempban", { duration: String(duration).trim(), reason });
+    });
+  }
+  add(p.muted ? "解除禁言" : "禁言", "", async () => {
+    if (p.muted){ act(p.name, "unmute"); return; }
+    const reason = await ask({ title: "禁言 " + p.name, input: true,
+      placeholder: "理由（可留空）", confirmText: "禁言" });
+    if (reason !== null) act(p.name, "mute", { reason });
+  });
+  add("改余额", "", async () => {
+    const amount = await ask({ title: "设置 " + p.name + " 的余额", input: true, numeric: true,
+      value: p.balance != null ? p.balance : 0, confirmText: "保存" });
+    if (amount !== null && String(amount).trim()) act(p.name, "setbalance", { amount: String(amount).trim() });
+  });
+}
+
+function playerCard(p, offline){
+  const card = document.createElement("div");
+  card.className = "pcard glass tap";
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+
+  const who = document.createElement("div"); who.className = "who";
+  const nameEl = document.createElement("b"); nameEl.textContent = p.name;
+  who.append(nameEl);
+
+  const meta = document.createElement("div"); meta.className = "meta";
+  if (offline){
+    meta.append(chip("离线"));
+  }else{
+    meta.append(chip(p.world), chip(p.ping + "ms"), chip(p.gamemode.toLowerCase()));
+  }
+  if (p.balance != null) meta.append(chip("余额 " + Number(p.balance).toFixed(2)));
+  if (p.playtime) meta.append(chip(p.playtime));
+  if (p.afk) meta.append(chip("挂机", "warn"));
+  if (p.vanished) meta.append(chip("隐身", "warn"));
+  if (p.muted) meta.append(chip("禁言", "bad"));
+  if (p.banned) meta.append(chip("已封禁", "bad"));
+  if (p.op) meta.append(chip("OP", "good"));
+  who.append(meta);
+  card.append(who);
+
+  // 搜索结果只有名字和余额，动作按钮要拿到完整状态才准，交给详情里做
+  if (!offline){
+    const acts = document.createElement("div"); acts.className = "acts";
+    playerActions(Object.assign({ online: true }, p), acts);
+    card.append(acts);
+  }
+
+  const open = () => openSheet(p.name);
+  card.addEventListener("click", open);
+  card.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); open(); }
+  });
+  return card;
 }
 
 async function loadPlayers(){
@@ -889,59 +1094,204 @@ async function loadPlayers(){
     host.append(empty);
     return;
   }
+  list.forEach(p => host.append(playerCard(p, false)));
+}
+$("#refreshPlayers").addEventListener("click", refreshPlayerViews);
 
-  list.forEach(p => {
-    const card = document.createElement("div"); card.className = "pcard glass";
-    const who = document.createElement("div"); who.className = "who";
-    const nameEl = document.createElement("b"); nameEl.textContent = p.name;
-    who.append(nameEl);
+/* ------------------------- 搜索（含离线） ------------------------- */
+let pQuery = "";
+let searchTimer = null;
+let searchSeq = 0;
 
-    const meta = document.createElement("div"); meta.className = "meta";
-    meta.append(chip(p.world), chip(p.ping + "ms"), chip(p.gamemode.toLowerCase()));
-    if (p.balance != null) meta.append(chip("余额 " + Number(p.balance).toFixed(2)));
-    if (p.playtime) meta.append(chip(p.playtime));
-    if (p.afk) meta.append(chip("挂机", "warn"));
-    if (p.vanished) meta.append(chip("隐身", "warn"));
-    if (p.muted) meta.append(chip("禁言", "bad"));
-    if (p.op) meta.append(chip("OP", "good"));
-    who.append(meta);
+async function runSearch(query){
+  // 每次请求带序号，慢的那个回来时如果已经不是最新一次搜索就直接丢掉，
+  // 否则快速打字时旧结果会盖掉新结果
+  const seq = ++searchSeq;
+  let list;
+  try{ list = await api("/players/search?q=" + encodeURIComponent(query)); }
+  catch(err){ toast(err.message, true); return; }
+  if (seq !== searchSeq || pQuery !== query) return;
 
-    const acts = document.createElement("div"); acts.className = "acts";
-    const add = (text, kind, handler) => {
-      const b = document.createElement("button");
-      b.className = "btn sm" + (kind ? " " + kind : "");
-      b.textContent = text;
-      b.addEventListener("click", handler);
-      acts.append(b);
-    };
-    add("踢出", "danger", async () => {
-      const reason = await ask({ title: "踢出 " + p.name, input: true,
-        placeholder: "理由（可留空）", confirmText: "踢出", danger: true });
-      if (reason !== null) act(p.name, "kick", { reason });
-    });
-    add("封禁", "danger", async () => {
-      const reason = await ask({ title: "封禁 " + p.name,
-        message: "玩家会被立即踢下线，且无法再进入服务器。", input: true,
-        placeholder: "理由（可留空）", confirmText: "封禁", danger: true });
-      if (reason !== null) act(p.name, "ban", { reason });
-    });
-    add(p.muted ? "解除禁言" : "禁言", "", async () => {
-      if (p.muted){ act(p.name, "unmute"); return; }
-      const reason = await ask({ title: "禁言 " + p.name, input: true,
-        placeholder: "理由（可留空）", confirmText: "禁言" });
-      if (reason !== null) act(p.name, "mute", { reason });
-    });
-    add("改余额", "", async () => {
-      const amount = await ask({ title: "设置 " + p.name + " 的余额", input: true, numeric: true,
-        value: p.balance != null ? p.balance : 0, confirmText: "保存" });
-      if (amount !== null && String(amount).trim()) act(p.name, "setbalance", { amount: String(amount).trim() });
-    });
+  const host = $("#plist");
+  host.textContent = "";
+  $("#pCount").textContent = "搜索 “" + query + "”：" + list.length + " 个结果";
+  if (!list.length){
+    const empty = document.createElement("div");
+    empty.className = "empty glass";
+    empty.textContent = "没有匹配的玩家";
+    host.append(empty);
+    return;
+  }
+  list.forEach(p => host.append(playerCard(p, true)));
+}
 
-    card.append(who, acts);
-    host.append(card);
+function onSearchInput(){
+  const value = $("#pSearch").value.trim();
+  $("#pSearchBox").classList.toggle("has", value.length > 0);
+  pQuery = value;
+  clearTimeout(searchTimer);
+  if (!value){ loadPlayers(); return; }
+  // 等打字停下来再查，别每敲一个字母就去翻一次数据库
+  searchTimer = setTimeout(() => runSearch(value), 220);
+}
+$("#pSearch").addEventListener("input", onSearchInput);
+$("#pSearchClear").addEventListener("click", () => {
+  $("#pSearch").value = "";
+  onSearchInput();
+  $("#pSearch").focus();
+});
+
+/* --------------------------- 详情抽屉 --------------------------- */
+let sheetName = null;
+
+/* rows 的每一项是 [标签, 值, 选项]，选项 "bad" 标红、"col" 上下排列 */
+function kvRow(host, key, value, kind){
+  const row = document.createElement("div");
+  row.className = "r" + (kind === "col" ? " col" : "");
+  const k = document.createElement("span"); k.className = "k"; k.textContent = key;
+  const v = document.createElement("span");
+  v.className = "v" + (kind === "bad" ? " bad" : ""); v.textContent = value;
+  row.append(k, v);
+  host.append(row);
+  return row;
+}
+
+function kvBlock(title, rows){
+  const wrap = document.createElement("div");
+  if (title){
+    const h = document.createElement("h4"); h.textContent = title;
+    wrap.append(h);
+  }
+  const box = document.createElement("div"); box.className = "kv";
+  rows.forEach(r => kvRow(box, r[0], r[1], r[2]));
+  wrap.append(box);
+  return wrap;
+}
+
+function closeSheet(){
+  const box = $("#sheet");
+  box.classList.remove("in");
+  sheetName = null;
+  // 等滑出动画放完再真正隐藏，否则下次打开会闪一下
+  setTimeout(() => { if (!sheetName) box.classList.remove("on"); }, 380);
+}
+
+/** @param quiet 内容刷新，不重新播放打开动画 */
+async function openSheet(name, quiet){
+  sheetName = name;
+  const box = $("#sheet");
+  if (!quiet){
+    box.classList.add("on");
+    requestAnimationFrame(() => box.classList.add("in"));
+    $("#shName").textContent = name;
+    $("#shChips").textContent = "";
+    $("#shBody").textContent = "";
+  }
+
+  let d;
+  try{ d = await api("/players/" + encodeURIComponent(name) + "/detail"); }
+  catch(err){ toast(err.message, true); closeSheet(); return; }
+  if (sheetName !== name) return;
+
+  $("#shName").textContent = d.nickname ? (d.name + "（" + d.nickname + "）") : d.name;
+  const chips = $("#shChips");
+  chips.textContent = "";
+  chips.append(chip(d.online ? "在线" : "离线", d.online ? "good" : ""));
+  if (d.banned) chips.append(chip("已封禁", "bad"));
+  if (d.muted) chips.append(chip("禁言中", "bad"));
+  if (d.live && d.live.op) chips.append(chip("OP", "good"));
+
+  const body = $("#shBody");
+  body.textContent = "";
+
+  const acts = document.createElement("div"); acts.className = "sheet-acts";
+  playerActions(d, acts);
+  body.append(acts);
+
+  const basics = [
+    ["余额", Number(d.balance || 0).toFixed(2)],
+    ["游戏时长", d.playtime || "-"],
+    ["首次加入", d.firstJoinText],
+    ["最后在线", d.online ? "当前在线" : d.lastSeenText],
+    ["家的数量", String(d.homes != null ? d.homes : 0)],
+    ["UUID", d.uuid, "col"]
+  ];
+  body.append(kvBlock("档案", basics));
+
+  if (d.online && d.live){
+    body.append(kvBlock("当前状态", [
+      ["世界", d.live.world],
+      ["延迟", d.live.ping + " ms"],
+      ["模式", String(d.live.gamemode || "").toLowerCase()],
+      ["生命", String(d.live.health)]
+    ]));
+  }
+
+  if (d.banned){
+    body.append(kvBlock("封禁", [
+      ["理由", d.banReason || "-"],
+      ["操作者", d.banSource || "-"],
+      ["到期", d.banExpiryText, "bad"]
+    ]));
+  }
+  if (d.muted){
+    body.append(kvBlock("禁言", [
+      ["理由", d.muteReason || "-"],
+      ["操作者", d.muteSource || "-"],
+      ["到期", d.muteExpiryText, "bad"]
+    ]));
+  }
+
+  const ledgerWrap = document.createElement("div");
+  const ledgerTitle = document.createElement("h4");
+  ledgerTitle.textContent = "经济流水";
+  const ledgerBox = document.createElement("div");
+  ledgerBox.className = "panel glass";
+  const loading = document.createElement("p");
+  loading.className = "note"; loading.textContent = "读取中…";
+  ledgerBox.append(loading);
+  ledgerWrap.append(ledgerTitle, ledgerBox);
+  body.append(ledgerWrap);
+
+  let ledger;
+  try{ ledger = await api("/players/" + encodeURIComponent(name) + "/ledger?limit=40"); }
+  catch(err){ loading.textContent = "读取流水失败：" + err.message; return; }
+  if (sheetName !== name) return;
+
+  ledgerBox.textContent = "";
+  if (!ledger.length){
+    const none = document.createElement("p");
+    none.className = "note";
+    none.textContent = "没有流水记录。可能是这名玩家还没有过交易，或 modules.economy 的流水记录未开启。";
+    ledgerBox.append(none);
+    return;
+  }
+  ledger.forEach(t => {
+    const row = document.createElement("div"); row.className = "tx mini";
+    const time = document.createElement("span"); time.className = "t";
+    // 抽屉里放不下完整时间戳，砍掉年份和秒；完整时间在 title 上
+    time.textContent = String(t.time || "").slice(5, 16);
+    time.title = t.time || "";
+    const amount = document.createElement("span");
+    const up = t.type === "DEPOSIT";
+    amount.className = "a " + (t.type === "SET" ? "" : (up ? "up" : "down"));
+    amount.textContent = (t.type === "SET" ? "±" : (up ? "+" : "−")) + Number(t.amount).toFixed(2);
+    const after = document.createElement("span"); after.className = "p";
+    after.textContent = Number(t.balanceAfter).toFixed(2);
+    const src = document.createElement("span"); src.className = "s";
+    src.textContent = [t.source, t.detail].filter(Boolean).join(" · ") || "-";
+    src.title = src.textContent;   // 列宽有限，靠 hover 看全
+    row.append(time, amount, after, src);
+    ledgerBox.append(row);
   });
 }
-$("#refreshPlayers").addEventListener("click", loadPlayers);
+
+$("#sheetClose").addEventListener("click", closeSheet);
+$("#sheetScrim").addEventListener("click", closeSheet);
+document.addEventListener("keydown", ev => {
+  // 对话框也监听 Esc，它层级更高，开着的时候把这次按键让给它
+  if (ev.key === "Escape" && sheetName && !$("#dlg").classList.contains("on")) closeSheet();
+});
 
 /* ---------------------------- 经济 ---------------------------- */
 function money(symbol, value){

@@ -214,6 +214,46 @@ public abstract class SqlStorage implements StorageProvider {
     }
 
     @Override
+    public synchronized List<UserSummary> searchUsers(String query, int limit) throws Exception {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        List<UserSummary> result = new ArrayList<>();
+        String sql = "SELECT uuid, name, balance FROM " + usersTable()
+                + " WHERE name <> '' AND LOWER(name) LIKE ? ESCAPE '!' ORDER BY name LIMIT ?";
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            statement.setString(1, likePattern(query));
+            statement.setInt(2, Math.max(1, limit));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    try {
+                        result.add(new UserSummary(UUID.fromString(rs.getString("uuid")),
+                                rs.getString("name"), rs.getDouble("balance")));
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 把搜索词转成 LIKE 模式。
+     *
+     * <p>必须转义：{@code _} 是 LIKE 的单字符通配符，而它在 Minecraft 用户名里完全合法，
+     * 不转义的话搜 {@code Cinna_io} 会把 {@code CinnaXio} 也捞出来。
+     * 转义符选 {@code !} 而不是反斜杠——MySQL 默认会把字符串字面量里的反斜杠再解释一层，
+     * {@code ESCAPE '\'} 在那边是个未闭合的字符串。</p>
+     */
+    static String likePattern(String query) {
+        String escaped = query.trim().toLowerCase(java.util.Locale.ROOT)
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
+        return "%" + escaped + "%";
+    }
+
+    @Override
     public synchronized Map<String, Object> loadGlobal(String key) throws Exception {
         String sql = "SELECT value FROM " + globalsTable() + " WHERE id = ?";
         try (PreparedStatement statement = connection().prepareStatement(sql)) {
