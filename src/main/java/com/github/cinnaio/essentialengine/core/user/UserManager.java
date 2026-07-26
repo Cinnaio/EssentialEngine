@@ -24,9 +24,34 @@ import java.util.logging.Level;
  */
 public class UserManager {
 
+    /** 离线数据在内存里保留多久没人访问就淘汰。 */
+    private static final long OFFLINE_TTL_MILLIS = 5 * 60 * 1000L;
+    /** 离线缓存的条数上限，防止批量给离线玩家发钱时把内存撑爆。 */
+    private static final int OFFLINE_MAX = 500;
+
     private final EssentialEngine plugin;
     private final Map<UUID, UserData> cache = new ConcurrentHashMap<>();
+    /**
+     * 离线玩家数据的短期缓存。
+     *
+     * <p>它的作用不是提速，而是<b>保证同一个 UUID 始终对应同一个 {@link UserData} 实例</b>。
+     * 没有它的话，每次读离线玩家都会从存储新建一个对象：两次连续的离线转账各自读到
+     * 同一份旧余额，后写的那次直接覆盖前一次，钱就凭空少了。有了稳定实例，
+     * {@code UserData} 上的锁才真正锁得住这个账户。</p>
+     */
+    private final Map<UUID, OfflineEntry> offline = new ConcurrentHashMap<>();
     private Object autoSaveHandle;
+
+    /** 带访问时间的离线缓存条目。 */
+    private static final class OfflineEntry {
+        final UserData data;
+        volatile long touched;
+
+        OfflineEntry(UserData data) {
+            this.data = data;
+            this.touched = System.currentTimeMillis();
+        }
+    }
 
     public UserManager(EssentialEngine plugin) {
         this.plugin = plugin;
@@ -75,7 +100,10 @@ public class UserManager {
      * （{@code AsyncPlayerPreLoginEvent} 本身就是异步的，可直接调用）。
      */
     public UserData loadIntoCache(UUID uuid, String name) {
-        UserData data = readFromStorage(uuid);
+        // 离线期间可能已经有改动挂在内存里还没落盘（比如刚给他转了账）。
+        // 这时必须沿用同一个实例，否则重新读盘会把那笔改动直接抹掉。
+        OfflineEntry pending = offline.remove(uuid);
+        UserData data = pending != null ? pending.data : readFromStorage(uuid);
         if (data == null) {
             data = new UserData(uuid, name);
         } else if (name != null) {
@@ -85,13 +113,28 @@ public class UserManager {
         return data;
     }
 
-    /** 读取离线玩家数据（不进缓存）。会阻塞。 */
+    /**
+     * 读取离线玩家数据。会阻塞。
+     *
+     * <p>同一个 UUID 反复调用返回的是<b>同一个实例</b>（见 {@link #offline}），
+     * 调用方因此可以安全地在它上面做原子的读-改-写。</p>
+     */
     public UserData loadOffline(UUID uuid) {
         UserData cached = cache.get(uuid);
         if (cached != null) {
             return cached;
         }
-        return readFromStorage(uuid);
+        // computeIfAbsent 保证并发调用只会读一次盘、只会产生一个实例。
+        // 里面带阻塞 IO 不理想，但这是低频路径，换来的是不会读出两个副本。
+        OfflineEntry entry = offline.computeIfAbsent(uuid, key -> {
+            UserData loaded = readFromStorage(key);
+            return loaded == null ? null : new OfflineEntry(loaded);
+        });
+        if (entry == null) {
+            return null;
+        }
+        entry.touched = System.currentTimeMillis();
+        return entry.data;
     }
 
     private UserData readFromStorage(UUID uuid) {
@@ -184,9 +227,44 @@ public class UserManager {
                 count++;
             }
         }
+        count += sweepOffline();
         if (count > 0 && plugin.getConfig().getBoolean("debug", false)) {
             plugin.getLogger().info("自动保存了 " + count + " 份玩家数据");
         }
+    }
+
+    /**
+     * 落盘并淘汰离线缓存。
+     *
+     * <p>有改动的先写盘、这一轮不淘汰，等下一轮确认干净了再移除，
+     * 所以不会出现「还没保存就被丢掉」。移除走 {@code computeIfPresent}，
+     * 与 {@link #loadOffline} 的插入互斥，不会把别人刚放进去的实例挤掉。</p>
+     *
+     * @return 这一轮写盘的份数
+     */
+    private int sweepOffline() {
+        long cutoff = System.currentTimeMillis() - OFFLINE_TTL_MILLIS;
+        long[] stamps = offline.values().stream().mapToLong(entry -> entry.touched).sorted().toArray();
+        int excess = stamps.length - OFFLINE_MAX;
+        if (excess > 0) {
+            // 超量时把淘汰线抬到「第 excess 老」那条，多出来的一起清掉
+            cutoff = Math.max(cutoff, stamps[excess]);
+        }
+        long deadline = cutoff;
+
+        int saved = 0;
+        for (Map.Entry<UUID, OfflineEntry> entry : offline.entrySet()) {
+            if (entry.getValue().data.isDirty()) {
+                saveBlocking(entry.getValue().data);
+                saved++;
+                continue;
+            }
+            if (entry.getValue().touched < deadline) {
+                offline.computeIfPresent(entry.getKey(), (uuid, current) ->
+                        current.data.isDirty() || current.touched >= deadline ? current : null);
+            }
+        }
+        return saved;
     }
 
     /** 关服时同步写盘。 */
@@ -196,6 +274,13 @@ public class UserManager {
             data.endSession();
             saveBlocking(data);
         }
+        // 离线缓存里可能压着还没落盘的改动，不写就真丢了
+        for (OfflineEntry entry : new ArrayList<>(offline.values())) {
+            if (entry.data.isDirty()) {
+                saveBlocking(entry.data);
+            }
+        }
+        offline.clear();
     }
 
     /** 玩家退出：结算在线时长、写盘、移出缓存。 */
@@ -206,6 +291,9 @@ public class UserManager {
         }
         data.endSession();
         data.setLastSeen(System.currentTimeMillis());
+        // 刚退出的玩家仍可能马上被转账 / 发奖励。先留在离线缓存里保持实例不变，
+        // 否则异步写盘还没落地就被重新读盘，这笔改动会被旧数据覆盖掉。
+        offline.put(uuid, new OfflineEntry(data));
         saveAsync(data);
     }
 }

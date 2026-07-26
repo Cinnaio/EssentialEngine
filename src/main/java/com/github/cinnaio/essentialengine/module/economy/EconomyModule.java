@@ -7,7 +7,6 @@ import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.storage.EconomySummary;
 import com.github.cinnaio.essentialengine.core.storage.SourceVolume;
-import com.github.cinnaio.essentialengine.core.storage.TransactionRecord;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.PlayerUtil;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
@@ -26,6 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.DoubleUnaryOperator;
 import java.util.logging.Level;
 
 /**
@@ -112,15 +112,6 @@ public class EconomyModule extends EngineModule {
         return ledger;
     }
 
-    /** 记一笔本插件自己触发的流水，来源固定为本插件、detail 说明是哪个操作。 */
-    private void log(UserData data, String type, double amount, String detail) {
-        if (ledger == null || data == null) {
-            return;
-        }
-        EconomyLedger.withSource(detail, () ->
-                ledger.record(data.getUuid(), data.getName(), type, amount, data.getBalance()));
-    }
-
     // ------------------------------------------------------------------ 余额
 
     private void balance(CommandSender sender, String label, String[] args) {
@@ -171,24 +162,19 @@ public class EconomyModule extends EngineModule {
                 plugin.messages().send(sender, "economy.pay-self");
                 return;
             }
-            if (self.getBalance() < amount) {
+            double maxBalance = cfgDouble("max-balance", 0D);
+            // 余额检查、扣款、入账在 transfer 里一次完成，中途插不进第二笔
+            EconomyManager.Transfer result = economy.transfer(self, target, amount, maxBalance, "pay");
+            if (result == EconomyManager.Transfer.NOT_ENOUGH) {
                 plugin.messages().send(sender, "economy.not-enough",
                         "balance", economy.format(self.getBalance()));
                 return;
             }
-            double maxBalance = cfgDouble("max-balance", 0D);
-            if (maxBalance > 0 && target.getBalance() + amount > maxBalance) {
+            if (result == EconomyManager.Transfer.TARGET_FULL) {
                 plugin.messages().send(sender, "economy.target-balance-full",
                         "player", target.getName(), "max", economy.format(maxBalance));
                 return;
             }
-            self.setBalance(self.getBalance() - amount);
-            target.setBalance(target.getBalance() + amount);
-            plugin.users().saveAsync(self);
-            plugin.users().saveAsync(target);
-            // 这里直接改的 UserData 而没走 EconomyManager，所以要自己记一笔
-            log(self, TransactionRecord.WITHDRAW, amount, "pay → " + target.getName());
-            log(target, TransactionRecord.DEPOSIT, amount, "pay ← " + player.getName());
             if (cooldown > 0) {
                 payCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldown * 1000L);
             }
@@ -226,32 +212,28 @@ public class EconomyModule extends EngineModule {
         }
         final double value = amount;
 
-        String operator = sender instanceof Player player ? player.getName() : "Console";
+        String actor = sender instanceof Player player ? player.getName() : "Console";
+        DoubleUnaryOperator change = switch (action) {
+            case "give", "add" -> current -> current + value;
+            case "take", "remove" -> current -> Math.max(0, current - value);
+            case "set" -> current -> value;
+            case "reset" -> current -> economy.startingBalance();
+            default -> null;
+        };
+        if (change == null) {
+            throw new CommandError("general.usage", "usage",
+                    MessageManager.localizedOr("usage.eco", "/eco <give|take|set|reset> <player> [amount]"));
+        }
+
         plugin.users().lookup(sender, args[1], data -> {
-            double before = data.getBalance();
-            switch (action) {
-                case "give", "add" -> data.setBalance(data.getBalance() + value);
-                case "take", "remove" -> data.setBalance(Math.max(0, data.getBalance() - value));
-                case "set" -> data.setBalance(value);
-                case "reset" -> data.setBalance(economy.startingBalance());
-                default -> {
-                    plugin.messages().send(sender, "general.usage", "usage",
-                            MessageManager.localizedOr("usage.eco", "/eco <give|take|set|reset> <player> [amount]"));
-                    return;
-                }
-            }
+            UserData.BalanceChange result = economy.apply(data, change, "eco " + action + " by " + actor);
             plugin.users().saveAsync(data);
-            double delta = data.getBalance() - before;
-            if (delta != 0) {
-                log(data, delta > 0 ? TransactionRecord.DEPOSIT : TransactionRecord.WITHDRAW,
-                        Math.abs(delta), "eco " + action + " by " + operator);
-            }
             plugin.messages().send(sender, "economy.eco-done",
-                    "player", data.getName(), "balance", economy.format(data.getBalance()));
+                    "player", data.getName(), "balance", economy.format(result.after()));
             Player online = Bukkit.getPlayer(data.getUuid());
             if (online != null && online != sender) {
                 plugin.messages().send(online, "economy.balance-changed",
-                        "balance", economy.format(data.getBalance()));
+                        "balance", economy.format(result.after()));
             }
         });
     }
@@ -462,11 +444,16 @@ public class EconomyModule extends EngineModule {
             // 只给刚创建档案的新玩家发初始资金。宽限期太短的话，
             // 服务器卡顿或档案被别的功能提前建好，新人就永远拿不到这笔钱。
             long grace = Math.max(1, cfgInt("starting-balance-grace-seconds", 300)) * 1000L;
-            if (System.currentTimeMillis() - data.getFirstJoin() < grace) {
-                data.setBalance(starting);
-                log(data, TransactionRecord.DEPOSIT, starting, "starting-balance");
+            if (System.currentTimeMillis() - data.getFirstJoin() >= grace) {
+                return;
+            }
+            // 「还没钱」的判断放进原子操作里：别的插件可能在登录事件里就给他发了钱，
+            // 先查后发的写法会把那笔钱直接覆盖掉
+            UserData.BalanceChange change =
+                    economy.apply(data, current -> current > 0 ? current : starting, "starting-balance");
+            if (change.delta() > 0) {
                 plugin.messages().send(event.getPlayer(), "economy.starting-balance",
-                        "balance", economy.format(starting));
+                        "balance", economy.format(change.after()));
             }
         }
     }

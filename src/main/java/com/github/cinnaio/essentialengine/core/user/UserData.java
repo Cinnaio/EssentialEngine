@@ -3,6 +3,8 @@ package com.github.cinnaio.essentialengine.core.user;
 import com.github.cinnaio.essentialengine.core.util.LocationUtil;
 import org.bukkit.Location;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -13,6 +15,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.DoubleUnaryOperator;
 
 /**
  * 一名玩家的全部持久化数据。
@@ -125,17 +128,62 @@ public class UserData {
         }
     }
 
-    public double getBalance() {
+    // ------------------------------------------------------------------ 余额
+    //
+    // 余额的读写全部在 this 上加锁。本插件是 Vault 的经济提供者，任何插件都可能
+    // 从异步线程调进来改钱，REST 接口更是直接跑在 HTTP 工作线程上；裸的 double
+    // 字段既没有跨线程可见性，也挡不住「查余额 → 扣款」中间被插进另一次扣款
+    // ——那会让同一笔钱被花两次。需要读-改-写的场景一律用下面的原子方法，
+    // 不要在外面自己拼 getBalance() + setBalance()。
+
+    /** 一次余额变动的前后快照。 */
+    public record BalanceChange(double before, double after) {
+        public double delta() {
+            return after - before;
+        }
+    }
+
+    /** 金额统一保留两位小数，避免浮点误差随着交易次数累积。 */
+    public static double roundMoney(double amount) {
+        return BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    public synchronized double getBalance() {
         return balance;
     }
 
-    public void setBalance(double value) {
-        this.balance = Math.max(0D, value);
+    public synchronized void setBalance(double value) {
+        this.balance = Math.max(0D, roundMoney(value));
         markDirty();
     }
 
-    public void addBalance(double amount) {
+    public synchronized void addBalance(double amount) {
         setBalance(this.balance + amount);
+    }
+
+    /**
+     * 原子地按 operator 计算新余额。
+     *
+     * <p>返回变动前后的值，这样调用方记流水时用的是<b>这次变动</b>的结果，
+     * 而不是改完再查一次——中间可能已经被别的线程改过，记出来的数对不上。</p>
+     */
+    public synchronized BalanceChange updateBalance(DoubleUnaryOperator operator) {
+        double before = balance;
+        setBalance(operator.applyAsDouble(before));
+        return new BalanceChange(before, balance);
+    }
+
+    /**
+     * 原子扣款：余额足够才扣。
+     *
+     * @return 扣款成功时返回前后余额，余额不足时返回 {@code null}（余额保持不变）
+     */
+    public synchronized BalanceChange tryWithdraw(double amount) {
+        double cost = roundMoney(amount);
+        if (balance < cost) {
+            return null;
+        }
+        return updateBalance(current -> current - cost);
     }
 
     public long getFirstJoin() {

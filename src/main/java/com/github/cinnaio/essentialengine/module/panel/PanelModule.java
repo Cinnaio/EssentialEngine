@@ -2,6 +2,7 @@ package com.github.cinnaio.essentialengine.module.panel;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
+import com.github.cinnaio.essentialengine.module.webapi.http.HttpLogging;
 import com.github.cinnaio.essentialengine.module.webapi.http.Router;
 
 import java.io.IOException;
@@ -57,6 +58,7 @@ public class PanelModule extends EngineModule {
         Router router = new Router();
         new PanelApi(plugin, sessions, new ConfigService(plugin), oidc).register(router);
 
+        HttpLogging.quietClientDisconnects(() -> plugin.getConfig().getBoolean("debug", false));
         server = new PanelServer(bindAddress, port, router, sessions,
                 plugin.getLogger(), cfgBool("log-requests", false),
                 oidc == null ? null : this::handleOidcCallback);

@@ -7,6 +7,7 @@ import com.github.cinnaio.essentialengine.module.webapi.endpoint.EssentialsEndpo
 import com.github.cinnaio.essentialengine.module.webapi.endpoint.ServerEndpoint;
 import com.github.cinnaio.essentialengine.module.webapi.endpoint.TownEndpoint;
 import com.github.cinnaio.essentialengine.module.webapi.http.AuthMiddleware;
+import com.github.cinnaio.essentialengine.module.webapi.http.HttpLogging;
 import com.github.cinnaio.essentialengine.module.webapi.http.HttpServer;
 import com.github.cinnaio.essentialengine.module.webapi.http.Router;
 
@@ -51,6 +52,7 @@ public class WebApiModule extends EngineModule {
             plugin.getLogger().info("[WebAPI] 已挂载 HuskTowns 城镇接口");
         }
 
+        HttpLogging.quietClientDisconnects(() -> plugin.getConfig().getBoolean("debug", false));
         AuthMiddleware auth = new AuthMiddleware(apiKey);
         server = new HttpServer(bindAddress, port, router, auth, plugin.getLogger(), logRequests,
                 cfgString("cors-origin", ""));

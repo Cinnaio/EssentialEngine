@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.DoubleUnaryOperator;
 
 /**
  * EssentialEngine 自身数据的接口：玩家档案、家、地标、经济、广播。
@@ -102,19 +103,25 @@ public class EssentialsEndpoint {
                 return ApiResponse.error(MODULE, "请求体需要 action 与 amount 字段");
             }
             double amount = json.get("amount").getAsDouble();
-            switch (json.get("action").getAsString().toLowerCase(Locale.ROOT)) {
-                case "give", "add" -> data.setBalance(data.getBalance() + amount);
-                case "take", "remove" -> data.setBalance(Math.max(0, data.getBalance() - amount));
-                case "set" -> data.setBalance(amount);
-                default -> {
-                    return ApiResponse.error(MODULE, "action 只能是 give / take / set");
-                }
+            String action = json.get("action").getAsString().toLowerCase(Locale.ROOT);
+            DoubleUnaryOperator change = switch (action) {
+                case "give", "add" -> current -> current + amount;
+                case "take", "remove" -> current -> Math.max(0, current - amount);
+                case "set" -> current -> amount;
+                default -> null;
+            };
+            if (change == null) {
+                return ApiResponse.error(MODULE, "action 只能是 give / take / set");
             }
+            // 这个处理器跑在 HTTP 工作线程上，和游戏内的扣款是真并发，
+            // 必须走 EconomyManager 的原子操作，不能自己读一次再写回去
+            UserData.BalanceChange result = plugin.economy()
+                    .apply(data, change, "webapi " + action);
             plugin.users().saveBlocking(data);
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("player", data.getName());
-            result.put("balance", data.getBalance());
-            return ApiResponse.ok(MODULE, result, "余额已更新");
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("player", data.getName());
+            body.put("balance", result.after());
+            return ApiResponse.ok(MODULE, body, "余额已更新");
         });
 
         router.post("/api/essentials/broadcast", (session, params) -> {
