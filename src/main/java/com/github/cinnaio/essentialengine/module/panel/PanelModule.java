@@ -2,6 +2,7 @@ package com.github.cinnaio.essentialengine.module.panel;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
+import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.module.webapi.http.HttpLogging;
 import com.github.cinnaio.essentialengine.module.webapi.http.Router;
 
@@ -89,6 +90,18 @@ public class PanelModule extends EngineModule {
         }
         this.oidc = client;
         plugin.getLogger().info("[Panel] OAuth 登录已启用，回调地址: " + client.redirectUri());
+
+        // 后台预热发现文档与 JWKS：让第一个登录的人不必等这两趟出站请求，
+        // 也能在开服日志里就发现 issuer 配错 / 皮肤站没起来，而不是等有人登录才暴露。
+        // 放异步是因为 provider 无响应时这里会阻塞到超时，绝不能拖住开服。
+        SchedulerCompat.runAsync(plugin, () -> {
+            try {
+                client.warmUp();
+                plugin.getLogger().info("[Panel] OAuth 授权服务器连接正常");
+            } catch (Exception error) {
+                plugin.getLogger().warning("[Panel] 连接 OAuth 授权服务器失败，登录时会重试: " + error.getMessage());
+            }
+        });
     }
 
     /**

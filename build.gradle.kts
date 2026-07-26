@@ -33,6 +33,21 @@ dependencies {
 
     // 说明：Vault 通过运行时动态代理对接，无需编译依赖；
     //       SQLite / MySQL 驱动在首次使用 SQL 存储时自动下载，同样不打进 jar。
+
+    // 测试只覆盖不依赖服务端运行时的纯逻辑（时长解析、余额并发、JWT 校验等），
+    // 需要 Bukkit 实例的部分不在这里测，那属于上服验证的范畴。
+    testImplementation(platform("org.junit:junit-bom:5.11.3"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testCompileOnly("io.papermc.paper:paper-api:${property("paperVersion")}")
+    testRuntimeOnly("io.papermc.paper:paper-api:${property("paperVersion")}")
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
 }
 
 tasks.withType<JavaCompile> {

@@ -28,6 +28,10 @@
 关闭某个模块后，它的命令会真正从服务端命令表里移除，不会和其它插件抢命令名。
 也可以在 `config.yml` 的 `commands.disabled` 里单独禁用某条命令、在 `commands.aliases` 里追加别名。
 
+> **时长必须带单位。** `/tempban`、`/tempmute` 只接受 `30m`、`2h`、`7d`、`1w2d`、`30分钟`、`永久`
+> 这类写法，`/tempban 某人 7` 会被拒绝。早期版本把无单位的数字当分钟处理，
+> 于是这条命令会静默地只封 7 分钟而不是 7 天，且不给任何提示。
+
 ---
 
 ## 存储
@@ -131,6 +135,23 @@ gradlew.bat clean shadowJar
 
 首次构建需要联网拉取 `paper-api`、`husktowns-bukkit` 与 `placeholderapi`
 （后两者都是可选前置，仅编译期需要）。
+
+### 测试
+
+```bash
+gradlew.bat test
+```
+
+测试只覆盖不依赖服务端运行时的纯逻辑，重点是出错代价高、又不容易靠肉眼发现的几处：
+
+| 覆盖对象 | 为什么值得测 |
+| --- | --- |
+| `UserData` 余额并发 | 并发扣款超卖会直接刷钱；用例是 64 线程同时扣款后对账 |
+| `TimeUtil.parseDuration` | 时长解析错了不会报错，只会静默封错时长 |
+| `ConfigService.coerce` | 面板保存配置的唯一类型关口，转错会改坏 config.yml 里的类型 |
+| `OidcClient.isAllowed` | 面板唯一的授权关口，放宽等于交出服务端配置 |
+
+需要 Bukkit 实例才能跑的部分不在这里覆盖，属于上服验证的范畴。
 
 ---
 

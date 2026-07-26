@@ -60,6 +60,8 @@ public final class TimeUtil {
     /**
      * 解析时长字符串，返回毫秒数。
      *
+     * <p>必须带单位：{@code 7} 会被拒绝，{@code 7d} 才是七天。</p>
+     *
      * @return 解析失败返回 -1；输入 {@code perm}/{@code permanent}/{@code 永久} 返回 0（表示永久）
      */
     public static long parseDuration(String input) {
@@ -80,12 +82,10 @@ public final class TimeUtil {
             total += amount * unitMillis(unit);
         }
         if (!matched) {
-            // 纯数字按分钟处理
-            try {
-                return Long.parseLong(value) * MINUTE;
-            } catch (NumberFormatException e) {
-                return -1;
-            }
+            // 纯数字一律拒绝。曾经把它当分钟处理，结果 /tempban 某人 7 表面上成功了，
+            // 管理员以为封了 7 天，实际只封了 7 分钟——命令不报错，没人会发现。
+            // 宁可让他重打一次带单位的，也不要静悄悄地封错时长。
+            return -1;
         }
         return total;
     }

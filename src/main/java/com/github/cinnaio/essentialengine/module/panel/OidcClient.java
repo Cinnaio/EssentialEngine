@@ -51,6 +51,17 @@ public class OidcClient {
     /** 授权请求的有效期。 */
     private static final long FLOW_TTL_MS = 5 * 60_000L;
 
+    /**
+     * 出站请求的超时，必须小于 NanoHTTPD 的 socket 读超时（5 秒）。
+     *
+     * <p>之前连接给了 10 秒、请求给了 15 秒，比入站的 5 秒还长：授权服务器一慢，
+     * 处理线程还在等它，浏览器那边的连接已经被掐断了，页面上只会看到一句
+     * {@code Failed to fetch}，我们精心写的中文报错根本送不出去。
+     * 压到 5 秒以内，才能保证「先超时、再把错误原样告诉用户」。</p>
+     */
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(4);
+
     /** 一次进行中的授权请求。 */
     private record Flow(String nonce, String verifier, long expiry) {
     }
@@ -67,7 +78,7 @@ public class OidcClient {
     private final String scopes;
 
     private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
+            .connectTimeout(CONNECT_TIMEOUT)
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
     private final SecureRandom random = new SecureRandom();
@@ -136,6 +147,20 @@ public class OidcClient {
         return value == null || value.isJsonNull() ? null : value.getAsString();
     }
 
+    /**
+     * 预热发现文档与 JWKS。
+     *
+     * <p>不预热的话，第一个点登录按钮的人要额外等两趟出站请求（发现文档 + JWKS），
+     * 加上换 token 本身，很容易顶到 5 秒的入站超时。预热还能在开服时就把
+     * issuer 配错、皮肤站没起来这类问题暴露在日志里，而不是等第一个人登录才发现。</p>
+     *
+     * <p>调用方负责放到异步线程执行，本方法自身不吞异常也不重试。</p>
+     */
+    public void warmUp() throws Exception {
+        discovery();
+        refreshJwks();
+    }
+
     // ------------------------------------------------------------------ 第一步：跳转授权
 
     /**
@@ -190,7 +215,7 @@ public class OidcClient {
                 + "&code_verifier=" + encode(flow.verifier());
 
         HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint("token_endpoint")))
-                .timeout(Duration.ofSeconds(15))
+                .timeout(REQUEST_TIMEOUT)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
@@ -347,7 +372,7 @@ public class OidcClient {
 
     private JsonObject getJson(String url) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofSeconds(15))
+                .timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json")
                 .GET().build();
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());

@@ -200,8 +200,13 @@ public class ConfigService {
         return new SaveResult(changed, rejected);
     }
 
-    /** 把前端传来的值转换成与原值一致的类型；无法转换返回 null。 */
-    private Object coerce(Object current, Object incoming) {
+    /**
+     * 把前端传来的值转换成与原值一致的类型；无法转换返回 null。
+     *
+     * <p>不依赖实例状态，声明成静态包级可见是为了能直接写单测——
+     * 这段是配置写入的唯一类型关口，出错会静默把 YAML 里的类型改掉。</p>
+     */
+    static Object coerce(Object current, Object incoming) {
         if (incoming == null) {
             return null;
         }
