@@ -28,6 +28,7 @@ public class AdminModule extends EngineModule {
     private static final String PERM = "essentialengine.command.";
     public static final String BAN_EXEMPT = "essentialengine.ban.exempt";
     public static final String KICK_EXEMPT = "essentialengine.kick.exempt";
+    public static final String MUTE_EXEMPT = "essentialengine.mute.exempt";
 
     public AdminModule(EssentialEngine plugin) {
         super(plugin, "admin", "管理与惩罚");
@@ -50,7 +51,7 @@ public class AdminModule extends EngineModule {
                 .usage("/tempban <玩家> <时长> [理由]").minArgs(2)
                 .handler(this::tempBan)
                 .completer((sender, args) -> args.length <= 1
-                        ? PlayerUtil.visibleNames(sender) : List.of("10m", "1h", "1d", "7d", "30d"));
+                        ? PlayerUtil.visibleNames(sender) : durationPresets());
 
         command("unban").aliases("pardon").permission(PERM + "unban").description("解除封禁")
                 .usage("/unban <玩家>").minArgs(1).handler(this::unban);
@@ -64,7 +65,7 @@ public class AdminModule extends EngineModule {
                 .usage("/tempmute <玩家> <时长> [理由]").minArgs(2)
                 .handler(this::tempMute)
                 .completer((sender, args) -> args.length <= 1
-                        ? PlayerUtil.visibleNames(sender) : List.of("10m", "1h", "1d", "7d"));
+                        ? PlayerUtil.visibleNames(sender) : durationPresets());
 
         command("unmute").permission(PERM + "unmute").description("解除禁言")
                 .usage("/unmute <玩家>").minArgs(1).handler(this::unmute)
@@ -105,8 +106,10 @@ public class AdminModule extends EngineModule {
         var message = plugin.messages().get(target, "admin.kick-screen",
                 "reason", reason, "operator", nameOf(sender));
         SchedulerCompat.runForEntity(plugin, target, () -> target.kick(message));
-        announce("admin.kick-broadcast", "player", target.getName(),
-                "operator", nameOf(sender), "reason", reason);
+        if (cfgBool("broadcast-kick", true)) {
+            announce("admin.kick-broadcast", "player", target.getName(),
+                    "operator", nameOf(sender), "reason", reason);
+        }
     }
 
     // ------------------------------------------------------------------ 封禁
@@ -141,8 +144,10 @@ public class AdminModule extends EngineModule {
                         "reason", reasonOf(reason), "operator", nameOf(sender), "duration", durationText);
                 SchedulerCompat.runForEntity(plugin, online, () -> online.kick(message));
             }
-            announce("admin.ban-broadcast", "player", data.getName(),
-                    "operator", nameOf(sender), "reason", reasonOf(reason), "duration", durationText);
+            if (cfgBool("broadcast-ban", true)) {
+                announce("admin.ban-broadcast", "player", data.getName(),
+                        "operator", nameOf(sender), "reason", reasonOf(reason), "duration", durationText);
+            }
         });
     }
 
@@ -173,19 +178,28 @@ public class AdminModule extends EngineModule {
         long expiry = duration <= 0 ? 0 : System.currentTimeMillis() + duration;
 
         plugin.users().lookup(sender, args[0], data -> {
+            Player online = Bukkit.getPlayer(data.getUuid());
+            // 与 ban / kick 对称：之前禁言是唯一不检查豁免权限的惩罚
+            if (online != null && online.hasPermission(MUTE_EXEMPT)) {
+                plugin.messages().send(sender, "admin.target-exempt", "player", data.getName());
+                return;
+            }
             data.setMute(reason, storedNameOf(sender), expiry);
             plugin.users().saveAsync(data);
             Object durationText = expiry <= 0
                     ? MessageManager.localized("general.permanent")
                     : TimeUtil.duration(expiry - System.currentTimeMillis());
 
-            Player online = Bukkit.getPlayer(data.getUuid());
             if (online != null) {
                 plugin.messages().send(online, "admin.muted-notify",
                         "reason", reasonOf(reason), "duration", durationText, "operator", nameOf(sender));
             }
             plugin.messages().send(sender, "admin.muted", "player", data.getName(),
                     "duration", durationText, "reason", reasonOf(reason));
+            if (cfgBool("broadcast-mute", false)) {
+                announce("admin.mute-broadcast", "player", data.getName(),
+                        "operator", nameOf(sender), "reason", reasonOf(reason), "duration", durationText);
+            }
         });
     }
 
@@ -236,6 +250,14 @@ public class AdminModule extends EngineModule {
         if (target.equals(player)) {
             throw new CommandError("admin.invsee-self");
         }
+        if (cfgBool("invsee-read-only", false)) {
+            // 复制一份快照，改动不会写回目标玩家的背包
+            var snapshot = Bukkit.createInventory(null, 45,
+                    net.kyori.adventure.text.Component.text(target.getName()));
+            snapshot.setContents(target.getInventory().getContents());
+            player.openInventory(snapshot);
+            return;
+        }
         player.openInventory(target.getInventory());
     }
 
@@ -249,9 +271,12 @@ public class AdminModule extends EngineModule {
         } else {
             target = PlayerUtil.requirePlayer(sender);
         }
+        boolean includeArmor = cfgBool("clear-includes-armor", true);
         SchedulerCompat.runForEntity(plugin, target, () -> {
             target.getInventory().clear();
-            target.getInventory().setArmorContents(null);
+            if (includeArmor) {
+                target.getInventory().setArmorContents(null);
+            }
         });
         plugin.messages().send(target, "admin.inventory-cleared");
         if (!target.equals(sender)) {
@@ -332,9 +357,16 @@ public class AdminModule extends EngineModule {
                 ? player.getName() : MessageManager.localized("general.console");
     }
 
-    /** 写进玩家数据的操作者名称（存储需要固定字符串，控制台统一存 Console）。 */
+    /** 写进玩家数据的操作者名称（存储需要固定字符串，控制台用配置里的名字）。 */
     private String storedNameOf(CommandSender sender) {
-        return sender instanceof Player player ? player.getName() : "Console";
+        return sender instanceof Player player ? player.getName() : cfgString("console-name", "Console");
+    }
+
+    /** /tempban /tempmute 的时长补全预设。 */
+    private List<String> durationPresets() {
+        List<String> presets = cfgList("duration-presets");
+        return presets == null || presets.isEmpty()
+                ? List.of("10m", "1h", "1d", "7d", "30d") : presets;
     }
 
     private String join(String[] args, int from) {

@@ -7,6 +7,7 @@ import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.PlayerUtil;
+import com.github.cinnaio.essentialengine.core.util.TimeUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -19,6 +20,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
@@ -30,6 +34,8 @@ public class EconomyModule extends EngineModule {
 
     private EconomyManager economy;
     private KitManager kits;
+    /** /pay 冷却，仅运行期有效，重启即清空。 */
+    private final Map<UUID, Long> payCooldowns = new ConcurrentHashMap<>();
 
     public EconomyModule(EssentialEngine plugin) {
         super(plugin, "economy", "经济与套装");
@@ -106,6 +112,18 @@ public class EconomyModule extends EngineModule {
         if (amount < minimum) {
             throw new CommandError("economy.amount-too-small", "min", economy.format(minimum));
         }
+        double maximum = cfgDouble("maximum-pay", 0D);
+        if (maximum > 0 && amount > maximum) {
+            throw new CommandError("economy.amount-too-large", "max", economy.format(maximum));
+        }
+        int cooldown = cfgInt("pay-cooldown-seconds", 0);
+        if (cooldown > 0) {
+            Long until = payCooldowns.get(player.getUniqueId());
+            if (until != null && until > System.currentTimeMillis()) {
+                throw new CommandError("economy.pay-cooldown",
+                        "time", TimeUtil.duration(until - System.currentTimeMillis()));
+            }
+        }
         UserData self = plugin.users().get(player);
         if (self.getBalance() < amount) {
             throw new CommandError("economy.not-enough", "balance", economy.format(self.getBalance()));
@@ -121,10 +139,19 @@ public class EconomyModule extends EngineModule {
                         "balance", economy.format(self.getBalance()));
                 return;
             }
+            double maxBalance = cfgDouble("max-balance", 0D);
+            if (maxBalance > 0 && target.getBalance() + amount > maxBalance) {
+                plugin.messages().send(sender, "economy.target-balance-full",
+                        "player", target.getName(), "max", economy.format(maxBalance));
+                return;
+            }
             self.setBalance(self.getBalance() - amount);
             target.setBalance(target.getBalance() + amount);
             plugin.users().saveAsync(self);
             plugin.users().saveAsync(target);
+            if (cooldown > 0) {
+                payCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldown * 1000L);
+            }
 
             plugin.messages().send(sender, "economy.pay-sent",
                     "amount", economy.format(amount), "player", target.getName());
@@ -175,10 +202,10 @@ public class EconomyModule extends EngineModule {
     }
 
     private void balTop(CommandSender sender, String label, String[] args) {
-        int limit = 10;
+        int limit = cfgInt("baltop-default-size", 10);
         if (args.length > 0) {
             try {
-                limit = Math.max(1, Math.min(50, Integer.parseInt(args[0])));
+                limit = Math.max(1, Math.min(cfgInt("baltop-max-size", 50), Integer.parseInt(args[0])));
             } catch (NumberFormatException ignored) {
             }
         }
@@ -301,8 +328,10 @@ public class EconomyModule extends EngineModule {
             if (starting <= 0 || data.getBalance() > 0) {
                 return;
             }
-            // 只给刚创建档案的新玩家发初始资金
-            if (System.currentTimeMillis() - data.getFirstJoin() < 60_000L) {
+            // 只给刚创建档案的新玩家发初始资金。宽限期太短的话，
+            // 服务器卡顿或档案被别的功能提前建好，新人就永远拿不到这笔钱。
+            long grace = Math.max(1, cfgInt("starting-balance-grace-seconds", 300)) * 1000L;
+            if (System.currentTimeMillis() - data.getFirstJoin() < grace) {
                 data.setBalance(starting);
                 plugin.messages().send(event.getPlayer(), "economy.starting-balance",
                         "balance", economy.format(starting));

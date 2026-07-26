@@ -52,7 +52,8 @@ public class WebApiModule extends EngineModule {
         }
 
         AuthMiddleware auth = new AuthMiddleware(apiKey);
-        server = new HttpServer(bindAddress, port, router, auth, plugin.getLogger(), logRequests);
+        server = new HttpServer(bindAddress, port, router, auth, plugin.getLogger(), logRequests,
+                cfgString("cors-origin", ""));
         try {
             server.startServer();
             plugin.getLogger().info("[WebAPI] 共注册 " + router.size() + " 条接口");

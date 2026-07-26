@@ -104,8 +104,22 @@ modules:
   # /workbench /enderchest /top /suicide /near /ping /playtime
   player:
     enabled: true
-    # /near 的默认搜索半径
+    # /near 的默认搜索半径，以及玩家手动指定时的上限
     near-radius: 100
+    near-max-radius: 1000
+    # /speed 可输入的最大值。原版速度上限是固定的，这里只是换算刻度：
+    # 填 10 就是 /speed 10 达到引擎最大速度，填 5 则 /speed 5 达到最大
+    speed-max: 10
+    # /heal 是否顺带回满饱食度、是否顺带灭火
+    heal-restores-hunger: true
+    heal-extinguishes-fire: true
+    # /god 是否连带免疫饥饿
+    god-prevents-hunger: true
+    # 飞行状态是否跨登录保留（关掉则每次进服都要重新 /fly）
+    fly-persist-on-join: true
+    # 死亡时是否重置飞行 / 无敌，防止用它规避死亡惩罚
+    reset-fly-on-death: false
+    reset-god-on-death: false
 
   # ---------------- 聊天与消息 ----------------
   # /msg /reply /msgtoggle /socialspy /ignore /nick /broadcast /me /afk /mail
@@ -129,6 +143,20 @@ modules:
   # /clearinventory /seen /whois
   admin:
     enabled: true
+    # 惩罚是否全服广播。禁言默认不广播，避免公开处刑
+    broadcast-kick: true
+    broadcast-ban: true
+    broadcast-mute: false
+    # /tempban /tempmute 按 Tab 时提示的时长预设
+    duration-presets: ["10m", "1h", "1d", "7d", "30d"]
+    # 控制台执行封禁 / 禁言时，记录在玩家数据里的操作者名字
+    console-name: "Console"
+    # /invsee 打开只读副本（改动不会写回对方背包）
+    invsee-read-only: false
+    # /clearinventory 是否连盔甲一起清
+    clear-includes-armor: true
+    # 隐身玩家的进服 / 退服消息是否一并隐藏
+    vanish-hide-join-quit: true
 
   # ---------------- 经济与套装 ----------------
   # /balance /pay /eco /baltop /kit
@@ -138,8 +166,19 @@ modules:
     currency-name: "金币"
     # 新玩家首次进服获得的初始资金，0 表示不发放
     starting-balance: 100.0
-    # 单次转账的最小金额
+    # 建档后多少秒内进服才算「新玩家」并发放初始资金。
+    # 太短的话，服务器卡顿或档案被别的功能提前建好，新人就永远拿不到这笔钱
+    starting-balance-grace-seconds: 300
+    # 单次转账的金额限制。maximum-pay 为 0 表示不限制
     minimum-pay: 0.01
+    maximum-pay: 0.0
+    # /pay 冷却秒数，0 表示无冷却
+    pay-cooldown-seconds: 0
+    # 账户余额上限，0 表示不限制（仅对 /pay 生效，管理员 /eco 不受限）
+    max-balance: 0.0
+    # /baltop 默认显示条数，以及玩家手动指定时的上限
+    baltop-default-size: 10
+    baltop-max-size: 50
     # 是否把本插件注册为 Vault 的经济提供者（需要服务器安装 Vault）。
     # 注册发生在插件的 onLoad 阶段，也就是所有插件 onEnable 之前，
     # 因此商店 / 职业 / 任务这类插件在启动时一定能查到经济服务。
@@ -205,3 +244,7 @@ modules:
     log-requests: false
     # 允许通过 /api/server/command 执行的命令白名单，留空表示不限制（不建议）
     allowed-commands: []
+    # 跨域来源。留空 = 不发 CORS 头，浏览器里的第三方页面就调不到本接口；
+    # 服务端到服务端的调用（机器人、监控）不受影响，因为 CORS 只约束浏览器。
+    # 需要网页前端直连时填具体来源，例如 "https://panel.example.com"；不建议填 "*"
+    cors-origin: ""

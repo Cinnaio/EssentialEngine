@@ -55,7 +55,9 @@ public class AdminListener implements Listener {
                 return;
             }
             VanishHelper.apply(plugin, player, true);
-            event.joinMessage(null);
+            if (hideJoinQuit()) {
+                event.joinMessage(null);
+            }
             plugin.messages().send(player, "admin.vanish-still-on");
         }
     }
@@ -63,8 +65,13 @@ public class AdminListener implements Listener {
     @EventHandler(priority = EventPriority.NORMAL)
     public void onQuit(PlayerQuitEvent event) {
         UserData data = plugin.users().getIfLoaded(event.getPlayer().getUniqueId());
-        if (data != null && data.isVanished()) {
+        if (data != null && data.isVanished() && hideJoinQuit()) {
             event.quitMessage(null);
         }
+    }
+
+    /** 隐身玩家是否连进退服消息也一起隐藏。 */
+    private boolean hideJoinQuit() {
+        return plugin.getConfig().getBoolean("modules.admin.vanish-hide-join-quit", true);
     }
 }

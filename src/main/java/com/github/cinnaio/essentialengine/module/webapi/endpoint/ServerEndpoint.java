@@ -127,7 +127,9 @@ public class ServerEndpoint {
 
         long uptime = ManagementFactory.getRuntimeMXBean().getUptime();
         status.put("uptimeMs", uptime);
-        status.put("uptimeFormatted", com.github.cinnaio.essentialengine.core.util.TimeUtil.formatDuration(uptime));
+        // 跟随 config 的 language，而不是 TimeUtil 里写死的中文
+        status.put("uptimeFormatted", plugin.messages().resolve(null,
+                com.github.cinnaio.essentialengine.core.util.TimeUtil.duration(uptime)));
         status.put("activeModules", plugin.modules().getActiveIds());
         return status;
     }

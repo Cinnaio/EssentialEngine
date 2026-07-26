@@ -14,14 +14,16 @@ public class HttpServer extends NanoHTTPD {
     private final AuthMiddleware auth;
     private final Logger logger;
     private final boolean logRequests;
+    private final String corsOrigin;
 
     public HttpServer(String hostname, int port, Router router, AuthMiddleware auth,
-                      Logger logger, boolean logRequests) {
+                      Logger logger, boolean logRequests, String corsOrigin) {
         super(hostname, port);
         this.router = router;
         this.auth = auth;
         this.logger = logger;
         this.logRequests = logRequests;
+        this.corsOrigin = corsOrigin == null ? "" : corsOrigin.trim();
     }
 
     @Override
@@ -60,10 +62,24 @@ public class HttpServer extends NanoHTTPD {
         }
     }
 
+    /**
+     * 按配置发 CORS 头。
+     *
+     * <p>{@code cors-origin} 留空时<b>完全不发</b> CORS 头，浏览器里的第三方页面就调不到
+     * 这个接口——服务端到服务端的调用（机器人、面板后端）不受影响，因为 CORS 只约束浏览器。
+     * 需要网页前端直连时再填具体来源，不建议填 {@code *}。</p>
+     */
     private Response cors(Response response) {
-        response.addHeader("Access-Control-Allow-Origin", "*");
+        if (corsOrigin.isEmpty()) {
+            return response;
+        }
+        response.addHeader("Access-Control-Allow-Origin", corsOrigin);
         response.addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         response.addHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+        if (!corsOrigin.equals("*")) {
+            // 来源随配置变化，得让缓存和代理知道
+            response.addHeader("Vary", "Origin");
+        }
         return response;
     }
 

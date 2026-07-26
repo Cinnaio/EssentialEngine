@@ -144,7 +144,8 @@ public class PanelApi {
 
         long uptime = ManagementFactory.getRuntimeMXBean().getUptime();
         data.put("uptimeMs", uptime);
-        data.put("uptime", TimeUtil.formatDuration(uptime));
+        // 走 lang 的 time.* 键，跟随 config 的 language；直接用 TimeUtil.formatDuration 会永远是中文
+        data.put("uptime", plugin.messages().resolve(null, TimeUtil.duration(uptime)));
 
         List<Map<String, Object>> modules = new ArrayList<>();
         for (EngineModule module : plugin.modules().getAll()) {
@@ -180,7 +181,8 @@ public class PanelApi {
                 item.put("vanished", data.isVanished());
                 item.put("muted", data.isMuted());
                 item.put("banned", data.isBanned());
-                item.put("playtime", TimeUtil.formatDuration(data.getTotalPlaytime()));
+                item.put("playtime",
+                        plugin.messages().resolve(null, TimeUtil.duration(data.getTotalPlaytime())));
                 item.put("nickname", data.getNickname());
             }
             result.add(item);

@@ -135,11 +135,17 @@ public class PlayerModule extends EngineModule {
 
     private void heal(CommandSender sender, String label, String[] args) {
         Player target = resolveTarget(sender, args.length > 0 ? args[0] : null, PERM + "heal");
+        boolean restoreHunger = cfgBool("heal-restores-hunger", true);
+        boolean extinguish = cfgBool("heal-extinguishes-fire", true);
         SchedulerCompat.runForEntity(plugin, target, () -> {
             target.setHealth(target.getMaxHealth());
-            target.setFoodLevel(20);
-            target.setSaturation(20F);
-            target.setFireTicks(0);
+            if (restoreHunger) {
+                target.setFoodLevel(20);
+                target.setSaturation(20F);
+            }
+            if (extinguish) {
+                target.setFireTicks(0);
+            }
         });
         plugin.messages().send(target, "player.healed");
         notifyOther(sender, target, "player.healed");
@@ -187,12 +193,14 @@ public class PlayerModule extends EngineModule {
                     MessageManager.localizedOr("usage.speed", "/speed [walk|fly] <0-10> [player]"));
         }
         float value = Float.parseFloat(args[index]);
-        if (value < 0 || value > 10) {
+        float max = (float) Math.max(1, cfgInt("speed-max", 10));
+        if (value < 0 || value > max) {
             throw new CommandError("player.speed-range");
         }
         Player target = resolveTarget(sender, args.length > index + 1 ? args[index + 1] : null, PERM + "speed");
         boolean flying = type == null ? target.isFlying() || target.getAllowFlight() : type.equals("fly");
-        float normalized = Math.max(0F, Math.min(1F, value / 10F));
+        // 归一化要跟着上限走，否则改了 speed-max 之后最大速度会对不上
+        float normalized = Math.max(0F, Math.min(1F, value / max));
         if (flying) {
             target.setFlySpeed(normalized);
         } else {
@@ -319,7 +327,7 @@ public class PlayerModule extends EngineModule {
     private void near(CommandSender sender, String label, String[] args) {
         Player player = PlayerUtil.requirePlayer(sender);
         int radius = args.length > 0 ? Integer.parseInt(args[0]) : cfgInt("near-radius", 100);
-        radius = Math.max(1, Math.min(1000, radius));
+        radius = Math.max(1, Math.min(cfgInt("near-max-radius", 1000), radius));
         List<String> found = new ArrayList<>();
         for (Player other : player.getWorld().getPlayers()) {
             if (other.equals(player) || !PlayerUtil.canSee(sender, other)) {
