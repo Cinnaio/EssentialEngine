@@ -24,6 +24,7 @@ import java.util.logging.Logger;
 public class PanelServer extends NanoHTTPD {
 
     private static final String PAGE_RESOURCE = "panel/index.html";
+    private static final String LOGO_RESOURCE = "panel/logo.png";
 
     /** OIDC 回调的处理器，由 {@link PanelModule} 注入。 */
     @FunctionalInterface
@@ -41,6 +42,7 @@ public class PanelServer extends NanoHTTPD {
     private final Logger logger;
     private final boolean logRequests;
     private final byte[] page;
+    private final byte[] logo;
     private final CallbackHandler oidcCallback;
 
     public PanelServer(String hostname, int port, Router router, SessionStore sessions,
@@ -51,19 +53,22 @@ public class PanelServer extends NanoHTTPD {
         this.logger = logger;
         this.logRequests = logRequests;
         this.oidcCallback = oidcCallback;
-        this.page = loadPage();
+        this.page = loadResource(PAGE_RESOURCE,
+                "<h1>panel/index.html 缺失，请重新构建插件</h1>".getBytes(StandardCharsets.UTF_8));
+        this.logo = loadResource(LOGO_RESOURCE, new byte[0]);
     }
 
-    private byte[] loadPage() {
-        try (InputStream stream = getClass().getClassLoader().getResourceAsStream(PAGE_RESOURCE)) {
+    /** 从 jar 里读一份资源，读不到就用兜底内容。 */
+    private byte[] loadResource(String path, byte[] fallback) {
+        try (InputStream stream = getClass().getClassLoader().getResourceAsStream(path)) {
             if (stream == null) {
-                return "<h1>panel/index.html 缺失，请重新构建插件</h1>".getBytes(StandardCharsets.UTF_8);
+                return fallback;
             }
             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             stream.transferTo(buffer);
             return buffer.toByteArray();
         } catch (IOException error) {
-            return "<h1>面板页面读取失败</h1>".getBytes(StandardCharsets.UTF_8);
+            return fallback;
         }
     }
 
@@ -88,6 +93,19 @@ public class PanelServer extends NanoHTTPD {
             Response response = newFixedLengthResponse(
                     Response.Status.OK, "text/html; charset=utf-8", new java.io.ByteArrayInputStream(page), page.length);
             return harden(response);
+        }
+
+        // 站点图标。登录页要用，所以同样不能要求会话
+        if (uri.equals("/logo.png")) {
+            if (logo.length == 0) {
+                return json(Response.Status.NOT_FOUND, ApiResponse.error("logo.png 缺失"));
+            }
+            Response response = newFixedLengthResponse(Response.Status.OK, "image/png",
+                    new java.io.ByteArrayInputStream(logo), logo.length);
+            harden(response);
+            // 图片基本不变，允许缓存；harden 里的 no-store 对它没意义
+            response.addHeader("Cache-Control", "public, max-age=86400");
+            return response;
         }
 
         // OIDC 回调：授权服务器把浏览器重定向回来，必须回 302 而不是 JSON。

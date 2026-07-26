@@ -112,15 +112,15 @@ svg{ stroke:currentColor; fill:none; stroke-width:1.9; stroke-linecap:round; str
   animation: rise .7s var(--spring) both;
 }
 @keyframes rise{ from{ opacity:0; transform:translateY(22px) scale(.97);} }
+/* logo 由 /logo.png 提供（同源静态资源，符合 CSP 的 img-src 'self'）。
+   图片自带底色，所以这里只负责圆角和投影，不再画背景。 */
 .mark{
-  width:62px; height:62px; border-radius:15px; margin:0 auto 18px;
-  background:var(--accent);
-  display:grid; place-items:center; color:#fff;
-  box-shadow:0 8px 20px rgba(0,122,255,.30);
+  width:64px; height:64px; border-radius:15px; margin:0 auto 16px;
+  display:block; object-fit:cover;
+  box-shadow:0 6px 18px rgba(0,0,0,.16);
 }
-.mark svg{ width:32px; height:32px; }
-.login-card h1{ font-size:24px; font-weight:700; text-align:center; letter-spacing:-.5px; }
-.login-card p{ font-size:14px; color:var(--text-2); text-align:center; margin:5px 0 24px; }
+.login-card .lead{ font-size:15px; color:var(--text-2); text-align:center; margin:0 0 24px; }
+.login-card p{ text-align:center; }
 /* 两种登录方式之间的分隔线 */
 .sep{ display:flex; align-items:center; gap:12px; margin:16px 0;
   font-size:12.5px; color:var(--text-3); }
@@ -143,8 +143,7 @@ aside{
   aside{ position:static; height:auto; border-right:0; border-bottom:1px solid var(--hairline); }
 }
 .brand{ display:flex; align-items:center; gap:10px; padding:2px 10px 22px; }
-.brand .mark{ width:30px; height:30px; border-radius:8px; margin:0; box-shadow:none; }
-.brand .mark svg{ width:17px; height:17px; }
+.brand .mark{ width:30px; height:30px; border-radius:7px; margin:0; box-shadow:none; }
 .brand b{ font-size:15px; font-weight:600; letter-spacing:-.2px; display:block; }
 .brand span{ display:block; font-size:11.5px; color:var(--text-3); }
 
@@ -396,18 +395,15 @@ input:-webkit-autofill:focus{
 <section id="login">
   <!-- novalidate：关掉浏览器自带的「请填写此字段」气泡，改用页面内提示 -->
   <form class="login-card glass" id="loginForm" novalidate>
-    <div class="mark">
-      <svg viewBox="0 0 24 24"><path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7z"/><path d="M12 12 20.5 7M12 12v9.4M12 12 3.5 7"/></svg>
-    </div>
-    <h1>EssentialEngine</h1>
-    <p>管理面板</p>
+    <img class="mark" src="/logo.png" alt="" width="64" height="64">
+    <p class="lead">管理面板</p>
     <div id="pwBox">
       <input type="password" id="pw" placeholder="面板密码" autocomplete="current-password">
       <button class="btn primary wide" style="margin-top:12px" type="submit" id="loginBtn">登录</button>
     </div>
     <div id="sepBox" class="sep" hidden>或</div>
     <button class="btn wide oauth" type="button" id="oauthBtn" hidden>
-      <svg viewBox="0 0 24 24"><path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7z"/><path d="M12 12 20.5 7M12 12v9.4M12 12 3.5 7"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/><path d="M10 17l5-5-5-5M15 12H3"/></svg>
       <span id="oauthLabel">使用 OAuth 登录</span>
     </button>
     <p id="loginMsg" style="margin:14px 0 0; min-height:18px; font-size:13px; color:var(--danger)"></p>
@@ -418,9 +414,7 @@ input:-webkit-autofill:focus{
 <div id="app">
   <aside class="frosted">
     <div class="brand">
-      <div class="mark">
-        <svg viewBox="0 0 24 24"><path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7z"/><path d="M12 12 20.5 7M12 12v9.4M12 12 3.5 7"/></svg>
-      </div>
+      <img class="mark" src="/logo.png" alt="" width="30" height="30">
       <div><b>EssentialEngine</b><span id="verTag">—</span></div>
     </div>
     <nav role="tablist">
