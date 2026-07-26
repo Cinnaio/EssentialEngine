@@ -220,6 +220,24 @@ public class MessageManager {
         return rawFor(localeOf(target), key, placeholders);
     }
 
+    /** 同 {@link #raw}，但键不存在时返回 {@code fallback} 而不是错误提示。 */
+    public String rawOr(CommandSender target, String key, String fallback, Object... placeholders) {
+        String localeKey = localeOf(target);
+        String template = template(localeKey, key);
+        return template == null ? fallback : render(localeKey, template, placeholders);
+    }
+
+    /**
+     * 把 {@link Localized} 与时间标记按接收者语言渲染成一段纯字符串。
+     *
+     * <p>给 PlaceholderAPI 这类「只要一个字符串、不需要整条消息」的外部集成用：
+     * 同一个 {@code %ee_playtime%} 在中文客户端上是「3天2小时」，
+     * 在英文客户端上是「3d 2h」。</p>
+     */
+    public String resolve(CommandSender target, Object value) {
+        return stringify(localeOf(target), value);
+    }
+
     private String rawFor(String localeKey, String key, Object[] placeholders) {
         String template = template(localeKey, key);
         if (template == null) {

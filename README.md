@@ -20,6 +20,7 @@
 | 管理与惩罚 | `admin` | `/kick` `/ban` `/tempban` `/unban` `/mute` `/tempmute` `/unmute` `/vanish` `/invsee` `/clearinventory` `/seen` `/whois` |
 | 经济与套装 | `economy` | `/balance` `/pay` `/eco` `/baltop` `/kit` |
 | HuskTowns 对接 | `husktowns` | `/eetown`（未安装 HuskTowns 时自动跳过） |
+| PlaceholderAPI 变量 | `papi` | 无命令，提供 `%ee_...%` 变量（未安装 PlaceholderAPI 时自动跳过） |
 | REST API | `webapi` | 无命令，提供 HTTP 接口（默认关闭） |
 | 核心 | `core` | `/ee reload\|info\|modules\|save` |
 
@@ -127,7 +128,8 @@ gradlew.bat clean shadowJar
 
 产物位于 `build/libs/EssentialEngine-<版本>.jar`，直接丢进 `plugins/` 即可。
 
-首次构建需要联网拉取 `paper-api` 与 `husktowns-bukkit`（后者仅编译期需要）。
+首次构建需要联网拉取 `paper-api`、`husktowns-bukkit` 与 `placeholderapi`
+（后两者都是可选前置，仅编译期需要）。
 
 ---
 
@@ -145,3 +147,106 @@ gradlew.bat clean shadowJar
   插件更新后新增的消息键会自动回落到内置默认值，不需要删档重建。
 - 「永久」「控制台」、时长（`3天2小时` / `3d 2h`）等占位符值
   也会按每位接收者的语言分别渲染——同一条广播，中英文玩家各看各的语言。
+
+---
+
+## PlaceholderAPI 变量
+
+装了 [PlaceholderAPI](https://www.spigotmc.org/resources/6245/) 后 `papi` 模块会自动启用，
+变量无需 `/papi ecloud download`——它由本插件自己注册。
+
+每个变量都有两种写法，`%essentialengine_<名称>%` 与更好写的 `%ee_<名称>%`，两者等价
+（短别名可在 `config.yml` 的 `modules.papi.short-alias` 关掉）。
+
+### 玩家
+
+| 变量 | 说明 |
+| --- | --- |
+| `name` / `uuid` | 玩家名 / UUID |
+| `displayname` | 展示名，有昵称则用昵称 |
+| `nickname` / `nickname_raw` | 昵称；无昵称时前者显示「无」，后者为空 |
+| `has_nickname` | `true` / `false` |
+| `is_online` | 是否在线 |
+| `locale` | 客户端语言，如 `zh_cn` |
+
+### 经济
+
+| 变量 | 说明 |
+| --- | --- |
+| `balance` | 余额，两位小数 |
+| `balance_formatted` | 带货币符号，如 `$100.00` |
+| `balance_commas` | 带千分位，如 `1,234.00` |
+| `currency_symbol` / `currency_name` | 货币符号 / 名称 |
+| `baltop_position` | 自己的排名，未进前 N 名时为 `0` |
+| `baltop_name_<名次>` | 排行榜第 N 名的玩家名 |
+| `baltop_balance_<名次>` | 第 N 名的余额 |
+| `baltop_balance_formatted_<名次>` | 第 N 名的余额（带符号） |
+
+### 时间
+
+| 变量 | 说明 |
+| --- | --- |
+| `playtime` | 累计在线时长，按玩家语言渲染 |
+| `playtime_hours` / `_minutes` / `_seconds` | 累计在线的纯数字 |
+| `session` / `session_seconds` | 本次会话时长 |
+| `idle` / `idle_seconds` | 空闲（无操作）时长 |
+| `firstjoin` / `lastlogin` / `lastseen` | 首次登录 / 最后登录 / 最后在线的时间 |
+| `lastseen_ago` | 最后在线距今多久，如 `3小时前` |
+
+### 状态
+
+| 变量 | 说明 |
+| --- | --- |
+| `afk` / `vanished` / `god` / `fly` | `true` / `false` |
+| `socialspy` / `msgtoggle` | `true` / `false` |
+| `afk_display` / `vanish_display` | 开启时显示 `[挂机]` / `[隐身]`，否则为空 |
+
+### 惩罚
+
+| 变量 | 说明 |
+| --- | --- |
+| `muted` / `banned` | `true` / `false` |
+| `mute_display` / `ban_display` | 生效时显示 `[禁言]` / `[封禁]`，否则为空 |
+| `mute_reason` / `ban_reason` | 原因 |
+| `mute_source` / `ban_source` | 执行者 |
+| `mute_expiry` / `ban_expiry` | 到期时间，永久时显示「永久」 |
+| `mute_remaining` / `ban_remaining` | 剩余时长 |
+
+### 家、地标与套装
+
+| 变量 | 说明 |
+| --- | --- |
+| `homes` / `homes_max` / `homes_free` | 已设置 / 上限 / 剩余可设置的家数量 |
+| `homes_list` | 家名称列表 |
+| `has_home_<名称>` | 是否设置了指定的家 |
+| `warps` / `warps_list` | 地标数量 / 名称列表 |
+| `kit_ready_<套装名>` | 该套装现在能否领取 |
+| `kit_cooldown_<套装名>` | 剩余冷却，可领取时显示「可领取」 |
+| `mails` / `has_mail` / `ignored` | 邮件数 / 是否有邮件 / 屏蔽人数 |
+
+### 服务器与城镇
+
+| 变量 | 说明 |
+| --- | --- |
+| `online`（= `online_visible`） | 在线人数（**不含隐身玩家**） |
+| `online_total` | 在线人数（含隐身） |
+| `vanished_count` / `afk_count` | 隐身 / 挂机人数 |
+| `max_players` | 服务器人数上限 |
+| `tps`（= `tps_1m`） / `tps_5m` / `tps_15m` | TPS（Folia 上返回空） |
+| `version` / `storage` / `modules` | 插件版本 / 存储后端 / 已启用模块 |
+| `module_<模块ID>` | 该模块是否启用 |
+| `town` / `has_town` / `town_role` | 所属城镇 / 是否有城镇 / 城镇身份 |
+| `town_level` / `town_members` / `town_money` | 城镇等级 / 成员数 / 金库（需 HuskTowns） |
+
+### 几点说明
+
+- **时长与日期跟随玩家语言**：`%ee_playtime%` 在中文客户端上是 `3天2小时`，
+  在英文客户端上是 `3d 2h`，与插件内消息使用同一套本地化。
+- **颜色**：带颜色的变量输出传统 `§` 颜色码，因此不认识 MiniMessage 的
+  计分板 / Tab 插件也能正确显示。`[挂机]` 这类标签的文本和颜色可在
+  语言文件的 `papi` 段自行修改，改成空字符串即可让它不显示。
+- **性能**：占位符只读内存，不做任何阻塞的磁盘 / 数据库读取。
+  余额排行榜走异步刷新的快照，缓存名次和间隔由 `modules.papi.baltop-size`
+  与 `baltop-cache-seconds` 控制（默认前 10 名、60 秒）。
+- **离线玩家**：只有仍在缓存中的离线玩家才能取到数据，
+  其余情况下与玩家数据相关的变量返回空字符串（为的是不在渲染路径上读盘）。

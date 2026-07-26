@@ -154,6 +154,19 @@ modules:
   husktowns:
     enabled: true
 
+  # ---------------- PlaceholderAPI 变量 ----------------
+  # 未安装 PlaceholderAPI 时会自动跳过。
+  # 变量清单见 README，例如 %ee_balance%、%ee_playtime%、%ee_afk_display%。
+  papi:
+    enabled: true
+    # 除 %essentialengine_xxx% 外，是否再注册一份好写的短别名 %ee_xxx%
+    short-alias: true
+    # 余额排行榜变量（%ee_baltop_name_1% 等）缓存多少名、多少秒刷新一次。
+    # 排行榜要查存储层，绝不能每次查询都读一遍，因此这里只用异步刷新的快照；
+    # 想让排行榜更实时就把秒数调小，但不建议低于 30。
+    baltop-size: 10
+    baltop-cache-seconds: 60
+
   # ---------------- REST API ----------------
   # 给外部程序（QQ / Discord 机器人、网页后台、监控面板）调用的 HTTP 接口。
   # 默认关闭；开启前请务必修改 api-key，并尽量只监听 127.0.0.1。

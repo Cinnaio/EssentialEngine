@@ -11,6 +11,9 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
     // HuskTowns（可选前置，仅编译期需要）
     maven("https://repo.william278.net/releases")
+    // PlaceholderAPI（可选前置，仅编译期需要）
+    maven("https://repo.extendedclip.com/releases/")
+    maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
 }
 
 java {
@@ -22,6 +25,7 @@ java {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:${property("paperVersion")}")
     compileOnly("net.william278.husktowns:husktowns-bukkit:${property("husktownsVersion")}")
+    compileOnly("me.clip:placeholderapi:${property("placeholderApiVersion")}")
 
     // REST API 模块用到，会被 shadow 重定位后打进 jar
     implementation("org.nanohttpd:nanohttpd:2.3.1")

@@ -207,6 +207,32 @@ public class TownService {
         return result;
     }
 
+    /**
+     * 玩家所属城镇的简要信息（name / role / level / members / money）。
+     *
+     * <p>只返回基础类型，不暴露任何 HuskTowns 的类——这样 PlaceholderAPI 之类的
+     * 调用方即使在没装 HuskTowns 的服务器上也不会触发类加载错误。
+     * API 未就绪或玩家不在城镇时返回 null。</p>
+     */
+    public Map<String, Object> summaryOf(Player player) {
+        if (api == null || player == null) {
+            return null;
+        }
+        Optional<Member> memberOpt = api.getUserTown(player);
+        if (memberOpt.isEmpty()) {
+            return null;
+        }
+        Member member = memberOpt.get();
+        Town town = member.town();
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("name", town.getName());
+        summary.put("role", member.role().getName());
+        summary.put("level", town.getLevel());
+        summary.put("members", town.getMembers().size());
+        summary.put("money", town.getMoney());
+        return summary;
+    }
+
     // ------------------------------------------------------------------ 内部工具
 
     private Map<String, Object> townToMap(Town town) {

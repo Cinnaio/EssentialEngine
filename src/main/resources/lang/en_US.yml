@@ -48,6 +48,7 @@ core:
   module-name-admin: "Admin"
   module-name-economy: "Economy"
   module-name-husktowns: "HuskTowns"
+  module-name-papi: "PlaceholderAPI"
   module-name-webapi: "REST API"
   info-header: "<#61AFEF>EssentialEngine <#8B95A5>v{version}"
   info-storage: "<#5C6370> - <#8B95A5>Storage: <#E8EAED>{value}"
@@ -260,6 +261,19 @@ husktowns:
   label-members: "Members"
   label-money: "Treasury"
   label-greeting: "Greeting"
+
+# Short tags used by the PlaceholderAPI placeholders.
+# These are emitted as legacy § colour codes so scoreboard / tab plugins render
+# them correctly; set a value to "" to make the matching *_display placeholder blank.
+papi:
+  not-installed: "PlaceholderAPI is not installed"
+  afk-display: "<#E5C07B>[AFK]"
+  vanish-display: "<#8B95A5>[Vanished]"
+  mute-display: "<#E06C75>[Muted]"
+  ban-display: "<#E06C75>[Banned]"
+  kit-ready: "Ready"
+  kit-once: "One-time"
+  unlimited: "Unlimited"
 
 # Command usage lines (shown on wrong arguments, localized per player)
 usage:

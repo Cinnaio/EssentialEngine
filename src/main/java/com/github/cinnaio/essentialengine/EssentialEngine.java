@@ -18,6 +18,7 @@ import com.github.cinnaio.essentialengine.module.economy.EconomyManager;
 import com.github.cinnaio.essentialengine.module.economy.EconomyModule;
 import com.github.cinnaio.essentialengine.module.economy.VaultHook;
 import com.github.cinnaio.essentialengine.module.husktowns.HuskTownsModule;
+import com.github.cinnaio.essentialengine.module.papi.PapiModule;
 import com.github.cinnaio.essentialengine.module.player.PlayerModule;
 import com.github.cinnaio.essentialengine.module.teleport.TeleportModule;
 import com.github.cinnaio.essentialengine.module.webapi.WebApiModule;
@@ -167,6 +168,7 @@ public class EssentialEngine extends JavaPlugin {
         modules.register(new AdminModule(this));
         modules.register(new EconomyModule(this));
         modules.register(new HuskTownsModule(this));
+        modules.register(new PapiModule(this));
         modules.register(new WebApiModule(this));
     }
 

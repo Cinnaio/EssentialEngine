@@ -13,6 +13,7 @@ website: https://github.com/Cinnaio/EssentialEngine
 softdepend:
   - HuskTowns
   - Vault
+  - PlaceholderAPI
 
 # 注意：本插件的命令全部在模块启用时动态注册，因此这里不需要声明 commands。
 # 关闭某个模块后，它的命令会真正从服务端命令表里消失。

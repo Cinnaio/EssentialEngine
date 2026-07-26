@@ -47,6 +47,7 @@ core:
   module-name-admin: "管理与惩罚"
   module-name-economy: "经济与套装"
   module-name-husktowns: "HuskTowns 对接"
+  module-name-papi: "PlaceholderAPI 变量"
   module-name-webapi: "REST API"
   info-header: "<#61AFEF>EssentialEngine <#8B95A5>v{version}"
   info-storage: "<#5C6370> - <#8B95A5>存储后端: <#E8EAED>{value}"
@@ -259,6 +260,19 @@ husktowns:
   label-members: "成员数"
   label-money: "金库"
   label-greeting: "欢迎语"
+
+# PlaceholderAPI 变量用到的短标签。
+# 这些值会被转成传统 § 颜色码输出，因此计分板 / Tab 插件都能正确显示；
+# 改成空字符串 "" 即可让对应的 *_display 变量什么都不显示。
+papi:
+  not-installed: "服务器未安装 PlaceholderAPI"
+  afk-display: "<#E5C07B>[挂机]"
+  vanish-display: "<#8B95A5>[隐身]"
+  mute-display: "<#E06C75>[禁言]"
+  ban-display: "<#E06C75>[封禁]"
+  kit-ready: "可领取"
+  kit-once: "仅限一次"
+  unlimited: "无限"
 
 # 命令用法（wrong-args 时展示，参数名跟随玩家语言）
 usage:
