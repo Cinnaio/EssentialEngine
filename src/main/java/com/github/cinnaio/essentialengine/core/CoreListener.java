@@ -8,8 +8,11 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLocaleChangeEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+
+import java.util.Locale;
 
 /**
  * 玩家数据生命周期：登录前预载、进服记账、退出写盘。
@@ -53,6 +56,24 @@ public class CoreListener implements Listener {
         data.setName(player.getName());
         data.startSession();
         data.setAfk(false);
+    }
+
+    /**
+     * 记录客户端语言。设置在进服后由客户端主动同步（也随玩家改语言实时触发），
+     * 存进玩家数据后，下次登录时的封禁画面等「设置还没同步」的场景就能用上。
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onLocaleChange(PlayerLocaleChangeEvent event) {
+        UserData data = plugin.users().getIfLoaded(event.getPlayer().getUniqueId());
+        if (data != null) {
+            data.setClientLocale(tagOf(event.locale()));
+        }
+    }
+
+    private String tagOf(Locale locale) {
+        String lang = locale.getLanguage().toLowerCase(Locale.ROOT);
+        String country = locale.getCountry();
+        return country.isEmpty() ? lang : lang + "_" + country.toLowerCase(Locale.ROOT);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

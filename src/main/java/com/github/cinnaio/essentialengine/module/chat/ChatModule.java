@@ -2,6 +2,7 @@ package com.github.cinnaio.essentialengine.module.chat;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.command.CommandError;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.PlayerUtil;
@@ -184,12 +185,12 @@ public class ChatModule extends EngineModule {
     // ------------------------------------------------------------------ 广播与 /me
 
     private void broadcast(CommandSender sender, String label, String[] args) {
-        String format = cfgString("broadcast-format", "&8[&c广播&8] &f{message}");
         String message = join(args, 0);
+        // 逐个接收者发送，广播前缀跟随各自语言
         for (Player player : Bukkit.getOnlinePlayers()) {
-            plugin.messages().sendRaw(player, format, "message", message);
+            plugin.messages().send(player, "chat.format-broadcast", "message", message);
         }
-        plugin.messages().sendRaw(Bukkit.getConsoleSender(), format, "message", message);
+        plugin.messages().send(Bukkit.getConsoleSender(), "chat.format-broadcast", "message", message);
     }
 
     private void me(CommandSender sender, String label, String[] args) {
@@ -198,13 +199,13 @@ public class ChatModule extends EngineModule {
         if (data.isMuted()) {
             throw new CommandError("admin.you-are-muted",
                     "reason", data.getMuteReason(),
-                    "time", data.getMuteExpiry() <= 0 ? "永久"
-                            : TimeUtil.formatDuration(data.getMuteExpiry() - System.currentTimeMillis()));
+                    "time", data.getMuteExpiry() <= 0
+                            ? MessageManager.localized("general.permanent")
+                            : TimeUtil.duration(data.getMuteExpiry() - System.currentTimeMillis()));
         }
-        String format = cfgString("me-format", "&d* {player} &f{message}");
         String message = manager.colorize(sender, join(args, 0));
         for (Player online : Bukkit.getOnlinePlayers()) {
-            plugin.messages().sendRaw(online, format,
+            plugin.messages().send(online, "chat.format-me",
                     "player", PlayerUtil.display(player), "message", message);
         }
     }
@@ -231,7 +232,8 @@ public class ChatModule extends EngineModule {
             }
             case "send" -> {
                 if (args.length < 3) {
-                    throw new CommandError("general.usage", "usage", "/mail send <玩家> <内容>");
+                    throw new CommandError("general.usage", "usage",
+                            MessageManager.localizedOr("usage.mail-send", "/mail send <player> <message>"));
                 }
                 String content = join(args, 2);
                 plugin.users().lookup(sender, args[1], target -> {
@@ -263,7 +265,7 @@ public class ChatModule extends EngineModule {
                     } catch (Exception ignored) {
                     }
                     plugin.messages().send(sender, "chat.mail-entry",
-                            "time", TimeUtil.formatDate(time),
+                            "time", TimeUtil.date(time),
                             "sender", parts.length > 1 ? parts[1] : "?",
                             "message", parts.length > 2 ? parts[2] : entry);
                 }

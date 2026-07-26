@@ -6,7 +6,9 @@
 #  不会和其它插件抢占命令名。
 # ============================================================
 
-# 语言文件：对应 messages_<语言>.yml，内置 zh_CN 与 en_US
+# 控制台 / 回退语言，对应 lang/<语言>.yml（内置 zh_CN 与 en_US）。
+# 玩家看到的消息自动跟随其客户端语言：中文客户端（zh_*）用 zh_CN，
+# 其余语言回退到 en_US；往 lang/ 目录添加 ja_JP.yml 之类的文件即可扩展。
 language: zh_CN
 
 # 打开后会输出更多调试日志（例如自动保存了多少份数据）
@@ -109,14 +111,10 @@ modules:
   # /msg /reply /msgtoggle /socialspy /ignore /nick /broadcast /me /afk /mail
   chat:
     enabled: true
-    # 是否接管聊天格式。默认关闭，避免和 LuckPerms 前缀、其它聊天插件冲突
+    # 是否接管聊天格式。默认关闭，避免和 LuckPerms 前缀、其它聊天插件冲突。
+    # 聊天 / 私聊 / 广播等格式文本已移到 lang/<语言>.yml 的 chat.format-* 键，
+    # 会按每位玩家的客户端语言分别渲染
     enable-chat-format: false
-    chat-format: "&7{player}&8: &f{message}"
-    private-format-sender: "&7[&f你 &7-> &f{target}&7] &f{message}"
-    private-format-target: "&7[&f{sender} &7-> &f你&7] &f{message}"
-    socialspy-format: "&8[监听] &7{sender} &8-> &7{target}&8: &f{message}"
-    broadcast-format: "&8[&c广播&8] &f{message}"
-    me-format: "&d* {player} &f{message}"
     # 多少秒无操作自动进入 AFK，0 表示关闭自动 AFK
     afk-timeout-seconds: 300
     # AFK 状态变化是否全服提示

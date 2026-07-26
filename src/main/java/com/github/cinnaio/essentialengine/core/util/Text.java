@@ -11,27 +11,59 @@ import org.bukkit.command.CommandSender;
  *
  * <p>同时兼容两种写法：</p>
  * <ul>
- *     <li>传统颜色代码：{@code &a你好}、{@code &#FF00FF渐变色}</li>
- *     <li>MiniMessage：{@code <green>你好</green>}、{@code <gradient:#ff0000:#00ff00>标题</gradient>}</li>
+ *     <li>传统颜色代码：{@code &a你好}、{@code &#FF00FF十六进制色}</li>
+ *     <li>MiniMessage：{@code <green>你好</green>}、{@code <#FF00FF>十六进制色}</li>
  * </ul>
- * 只要字符串里出现了成对的尖括号就按 MiniMessage 解析，否则按传统颜色代码解析。
+ *
+ * <p>解析模式按<b>模板</b>判断（出现成对尖括号即视为 MiniMessage），而不是按替换完
+ * 占位符之后的最终字符串判断，避免玩家输入 {@code <3} 之类的内容意外改变整条消息
+ * 的解析方式。同一条消息不要混用两种写法。</p>
  */
 public final class Text {
 
     private static final MiniMessage MINI = MiniMessage.miniMessage();
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
-    private static final LegacyComponentSerializer SECTION = LegacyComponentSerializer.legacySection();
+    /** 传统 & 颜色代码，同时支持 {@code &#RRGGBB} 十六进制。 */
+    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.builder()
+            .character('&')
+            .hexColors()
+            .build();
+    private static final LegacyComponentSerializer SECTION = LegacyComponentSerializer.builder()
+            .character('§')
+            .hexColors()
+            .build();
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
 
     private Text() {
     }
 
-    /** 把原始字符串解析成 Adventure 组件。 */
-    public static Component parse(String raw) {
+    /** 模板是否按 MiniMessage 解析（含成对尖括号）。 */
+    public static boolean isMini(String raw) {
+        if (raw == null) {
+            return false;
+        }
+        int open = raw.indexOf('<');
+        return open >= 0 && raw.indexOf('>', open) > open;
+    }
+
+    /**
+     * 把占位符的值转换成可以安全嵌入 MiniMessage 模板的形式：
+     * 值里的传统 {@code &} 颜色代码会转换成对应标签，
+     * 而裸露的 {@code <} 会被转义成字面文本——玩家无法通过输入
+     * {@code <click:...>} 之类的标签注入点击事件或样式。
+     */
+    public static String miniValue(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        return MINI.serialize(LEGACY.deserialize(value));
+    }
+
+    /** 按指定模式解析。MiniMessage 解析失败时回退到传统颜色代码。 */
+    public static Component parseAs(boolean mini, String raw) {
         if (raw == null || raw.isEmpty()) {
             return Component.empty();
         }
-        if (looksLikeMiniMessage(raw)) {
+        if (mini) {
             try {
                 return MINI.deserialize(raw);
             } catch (Exception ignored) {
@@ -39,6 +71,11 @@ public final class Text {
             }
         }
         return LEGACY.deserialize(raw);
+    }
+
+    /** 把原始字符串解析成 Adventure 组件，模式自动判断。 */
+    public static Component parse(String raw) {
+        return parseAs(isMini(raw), raw);
     }
 
     /** 解析并替换占位符，占位符写法为 {key}。 */
@@ -91,10 +128,5 @@ public final class Text {
             return;
         }
         target.sendMessage(component);
-    }
-
-    private static boolean looksLikeMiniMessage(String raw) {
-        int open = raw.indexOf('<');
-        return open >= 0 && raw.indexOf('>', open) > open;
     }
 }

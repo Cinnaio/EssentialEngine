@@ -1,6 +1,7 @@
 package com.github.cinnaio.essentialengine.core;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.util.Text;
@@ -51,30 +52,35 @@ public class CoreModule extends EngineModule {
             case "modules" -> {
                 plugin.messages().send(sender, "core.module-header");
                 plugin.modules().getAll().forEach(module -> {
-                    String state;
+                    Object state;
                     if (module.isEnabled()) {
-                        state = "&a已启用";
+                        state = MessageManager.localized("core.module-state-on");
                     } else if (!module.isAvailable()) {
-                        state = "&7不可用（" + module.getUnavailableReason() + "）";
+                        // getUnavailableReason 可返回语言键或字面文本，两者都兼容
+                        state = MessageManager.localized("core.module-state-unavailable", "reason",
+                                MessageManager.localizedOr(module.getUnavailableReason(),
+                                        module.getUnavailableReason()));
                     } else {
-                        state = "&c已关闭";
+                        state = MessageManager.localized("core.module-state-off");
                     }
-                    plugin.messages().sendRaw(sender, "&8 - &f{name} &7({id}) {state}",
-                            "name", module.getDisplayName(), "id", module.getId(), "state", state);
+                    plugin.messages().send(sender, "core.module-entry",
+                            "name", MessageManager.localizedOr(
+                                    "core.module-name-" + module.getId(), module.getDisplayName()),
+                            "id", module.getId(), "state", state);
                 });
             }
             default -> {
                 plugin.messages().send(sender, "core.info-header",
                         "version", plugin.getDescription().getVersion());
-                plugin.messages().sendRaw(sender, "&8 - &7存储后端: &f{value}",
+                plugin.messages().send(sender, "core.info-storage",
                         "value", plugin.storage().getName());
-                plugin.messages().sendRaw(sender, "&8 - &7服务端: &f{value}",
-                        "value", Bukkit.getVersion() + (SchedulerCompat.isFolia() ? " &b(Folia)" : ""));
-                plugin.messages().sendRaw(sender, "&8 - &7已启用模块: &f{value}",
+                plugin.messages().send(sender, "core.info-server",
+                        "value", Bukkit.getVersion() + (SchedulerCompat.isFolia() ? " (Folia)" : ""));
+                plugin.messages().send(sender, "core.info-modules",
                         "value", String.join(", ", plugin.modules().getActiveIds()));
-                plugin.messages().sendRaw(sender, "&8 - &7已注册命令: &f{value}",
+                plugin.messages().send(sender, "core.info-commands",
                         "value", String.valueOf(plugin.commands().getRegistered().size()));
-                plugin.messages().sendRaw(sender, "&8 - &7缓存玩家: &f{value}",
+                plugin.messages().send(sender, "core.info-players",
                         "value", String.valueOf(plugin.users().getCached().size()));
             }
         }

@@ -1,10 +1,12 @@
 package com.github.cinnaio.essentialengine.module.chat;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.PlayerUtil;
 import com.github.cinnaio.essentialengine.core.util.Text;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
+import org.bukkit.command.CommandSender;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
@@ -44,8 +46,9 @@ public class ChatListener implements Listener {
             event.setCancelled(true);
             plugin.messages().send(player, "admin.you-are-muted",
                     "reason", data.getMuteReason(),
-                    "time", data.getMuteExpiry() <= 0 ? "永久"
-                            : TimeUtil.formatDuration(data.getMuteExpiry() - System.currentTimeMillis()));
+                    "time", data.getMuteExpiry() <= 0
+                            ? MessageManager.localized("general.permanent")
+                            : TimeUtil.duration(data.getMuteExpiry() - System.currentTimeMillis()));
             return;
         }
 
@@ -58,33 +61,41 @@ public class ChatListener implements Listener {
             return viewerData != null && viewerData.isIgnoring(player.getUniqueId());
         });
 
-        // 自定义聊天格式
+        // 自定义聊天格式（格式文本在语言文件 chat.format-chat 里，按观看者语言渲染）
         if (plugin.getConfig().getBoolean("modules.chat.enable-chat-format", false)) {
-            String format = plugin.getConfig().getString("modules.chat.chat-format", "&7{player}&8: &f{message}");
-            event.renderer(new FormatRenderer(format));
+            event.renderer(new FormatRenderer(plugin));
         }
 
         manager.markActive(player);
     }
 
-    /** 把配置里的 {message} 位置替换成真正的消息组件，保留原始颜色与点击事件。 */
+    /** 把格式里的 {message} 位置替换成真正的消息组件，保留原始颜色与点击事件。 */
     private static class FormatRenderer implements io.papermc.paper.chat.ChatRenderer {
 
-        private final String format;
+        private static final String DEFAULT_FORMAT = "<#8B95A5>{player}<#5C6370>: <#E8EAED>{message}";
 
-        FormatRenderer(String format) {
-            this.format = format;
+        private final EssentialEngine plugin;
+
+        FormatRenderer(EssentialEngine plugin) {
+            this.plugin = plugin;
         }
 
         @Override
         public Component render(Player source, Component sourceDisplayName, Component message, Audience viewer) {
-            String display = PlayerUtil.display(source);
+            String format = viewer instanceof CommandSender sender
+                    ? plugin.messages().templateFor(sender, "chat.format-chat") : null;
+            if (format == null) {
+                format = DEFAULT_FORMAT;
+            }
+            boolean mini = Text.isMini(format);
+            // 昵称可能带 & 颜色代码，MiniMessage 模板下需要转换
+            String display = mini ? Text.miniValue(PlayerUtil.display(source)) : PlayerUtil.display(source);
             String[] parts = format.split("\\{message}", -1);
-            Component result = Text.parse(Text.replace(parts[0],
+            Component result = Text.parseAs(mini, Text.replace(parts[0],
                     "player", display, "name", source.getName(), "world", source.getWorld().getName()));
             result = result.append(message);
             for (int i = 1; i < parts.length; i++) {
-                result = result.append(Text.parse(Text.replace(parts[i],
+                result = result.append(Text.parseAs(mini, Text.replace(parts[i],
                         "player", display, "name", source.getName(), "world", source.getWorld().getName())));
             }
             return result;

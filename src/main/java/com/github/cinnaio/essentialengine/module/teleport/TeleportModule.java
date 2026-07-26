@@ -2,6 +2,7 @@ package com.github.cinnaio.essentialengine.module.teleport;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.command.CommandError;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.user.UserData;
@@ -196,7 +197,8 @@ public class TeleportModule extends EngineModule {
     private void delHome(CommandSender sender, String label, String[] args) {
         Player player = PlayerUtil.requirePlayer(sender);
         if (args.length == 0) {
-            throw new CommandError("general.usage", "usage", "/delhome <名称>");
+            throw new CommandError("general.usage", "usage",
+                    MessageManager.localizedOr("usage.delhome", "/delhome <name>"));
         }
         UserData data = plugin.users().get(player);
         String name = args[0].toLowerCase(Locale.ROOT);
@@ -227,7 +229,7 @@ public class TeleportModule extends EngineModule {
         plugin.messages().send(sender, "teleport.home-list",
                 "player", data.getName(),
                 "count", String.valueOf(data.getHomeCount()),
-                "homes", String.join("&7, &f", data.getHomeNames()));
+                "homes", String.join("&#5C6370, &#E8EAED", data.getHomeNames()));
     }
 
     // ------------------------------------------------------------------ 地标
@@ -283,7 +285,7 @@ public class TeleportModule extends EngineModule {
         }
         plugin.messages().send(sender, "teleport.warp-list",
                 "count", String.valueOf(names.size()),
-                "warps", String.join("&7, &f", names));
+                "warps", String.join("&#5C6370, &#E8EAED", names));
     }
 
     // ------------------------------------------------------------------ 出生点
@@ -412,7 +414,8 @@ public class TeleportModule extends EngineModule {
         plugin.messages().send(sender, "teleport.tp-success",
                 "player", first.getName(), "target", second.getName());
         plugin.messages().send(first, "teleport.tp-target", "player",
-                sender instanceof Player p ? PlayerUtil.display(p) : "控制台");
+                sender instanceof Player p ? PlayerUtil.display(p)
+                        : MessageManager.localized("general.console"));
     }
 
     private void tpHere(CommandSender sender, String label, String[] args) {

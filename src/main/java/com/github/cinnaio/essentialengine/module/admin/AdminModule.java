@@ -2,12 +2,12 @@ package com.github.cinnaio.essentialengine.module.admin;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.command.CommandError;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.LocationUtil;
 import com.github.cinnaio.essentialengine.core.util.PlayerUtil;
-import com.github.cinnaio.essentialengine.core.util.Text;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 管理与惩罚模块：踢出、封禁、禁言、隐身、背包查看等。
@@ -99,10 +100,11 @@ public class AdminModule extends EngineModule {
         if (target.hasPermission(KICK_EXEMPT)) {
             throw new CommandError("admin.target-exempt", "player", target.getName());
         }
-        String reason = args.length > 1 ? join(args, 1) : plugin.messages().raw("admin.default-reason");
-        String message = plugin.messages().raw("admin.kick-screen", "reason", reason,
-                "operator", nameOf(sender));
-        SchedulerCompat.runForEntity(plugin, target, () -> target.kickPlayer(Text.legacy(message)));
+        Object reason = reasonOf(args.length > 1 ? join(args, 1) : "");
+        // 踢出画面按被踢玩家的语言渲染
+        var message = plugin.messages().get(target, "admin.kick-screen",
+                "reason", reason, "operator", nameOf(sender));
+        SchedulerCompat.runForEntity(plugin, target, () -> target.kick(message));
         announce("admin.kick-broadcast", "player", target.getName(),
                 "operator", nameOf(sender), "reason", reason);
     }
@@ -118,8 +120,8 @@ public class AdminModule extends EngineModule {
     }
 
     private void ban(CommandSender sender, String[] args, long duration, int reasonIndex) {
-        String reason = args.length > reasonIndex
-                ? join(args, reasonIndex) : plugin.messages().raw("admin.default-reason");
+        // 未填理由时存空串，展示时再按各自语言替换成 admin.default-reason
+        String reason = args.length > reasonIndex ? join(args, reasonIndex) : "";
         long expiry = duration <= 0 ? 0 : System.currentTimeMillis() + duration;
 
         plugin.users().lookup(sender, args[0], data -> {
@@ -128,17 +130,19 @@ public class AdminModule extends EngineModule {
                 plugin.messages().send(sender, "admin.target-exempt", "player", data.getName());
                 return;
             }
-            data.setBan(reason, nameOf(sender), expiry);
+            data.setBan(reason, storedNameOf(sender), expiry);
             plugin.users().saveAsync(data);
 
-            String duration_text = expiry <= 0 ? "永久" : TimeUtil.formatDuration(expiry - System.currentTimeMillis());
+            Object durationText = expiry <= 0
+                    ? MessageManager.localized("general.permanent")
+                    : TimeUtil.duration(expiry - System.currentTimeMillis());
             if (online != null) {
-                String message = plugin.messages().raw("admin.ban-screen",
-                        "reason", reason, "operator", nameOf(sender), "duration", duration_text);
-                SchedulerCompat.runForEntity(plugin, online, () -> online.kickPlayer(Text.legacy(message)));
+                var message = plugin.messages().get(online, "admin.ban-screen",
+                        "reason", reasonOf(reason), "operator", nameOf(sender), "duration", durationText);
+                SchedulerCompat.runForEntity(plugin, online, () -> online.kick(message));
             }
             announce("admin.ban-broadcast", "player", data.getName(),
-                    "operator", nameOf(sender), "reason", reason, "duration", duration_text);
+                    "operator", nameOf(sender), "reason", reasonOf(reason), "duration", durationText);
         });
     }
 
@@ -165,22 +169,23 @@ public class AdminModule extends EngineModule {
     }
 
     private void mute(CommandSender sender, String[] args, long duration, int reasonIndex) {
-        String reason = args.length > reasonIndex
-                ? join(args, reasonIndex) : plugin.messages().raw("admin.default-reason");
+        String reason = args.length > reasonIndex ? join(args, reasonIndex) : "";
         long expiry = duration <= 0 ? 0 : System.currentTimeMillis() + duration;
 
         plugin.users().lookup(sender, args[0], data -> {
-            data.setMute(reason, nameOf(sender), expiry);
+            data.setMute(reason, storedNameOf(sender), expiry);
             plugin.users().saveAsync(data);
-            String durationText = expiry <= 0 ? "永久" : TimeUtil.formatDuration(expiry - System.currentTimeMillis());
+            Object durationText = expiry <= 0
+                    ? MessageManager.localized("general.permanent")
+                    : TimeUtil.duration(expiry - System.currentTimeMillis());
 
             Player online = Bukkit.getPlayer(data.getUuid());
             if (online != null) {
                 plugin.messages().send(online, "admin.muted-notify",
-                        "reason", reason, "duration", durationText, "operator", nameOf(sender));
+                        "reason", reasonOf(reason), "duration", durationText, "operator", nameOf(sender));
             }
             plugin.messages().send(sender, "admin.muted", "player", data.getName(),
-                    "duration", durationText, "reason", reason);
+                    "duration", durationText, "reason", reasonOf(reason));
         });
     }
 
@@ -262,12 +267,12 @@ public class AdminModule extends EngineModule {
             if (online != null && PlayerUtil.canSee(sender, online)) {
                 plugin.messages().send(sender, "admin.seen-online",
                         "player", data.getName(),
-                        "time", TimeUtil.formatDuration(data.getTotalPlaytime()));
+                        "time", TimeUtil.duration(data.getTotalPlaytime()));
             } else {
                 plugin.messages().send(sender, "admin.seen-offline",
                         "player", data.getName(),
-                        "time", TimeUtil.formatDate(data.getLastSeen()),
-                        "ago", TimeUtil.formatAgo(data.getLastSeen()));
+                        "time", TimeUtil.date(data.getLastSeen()),
+                        "ago", TimeUtil.ago(data.getLastSeen()));
             }
         });
     }
@@ -276,29 +281,35 @@ public class AdminModule extends EngineModule {
         plugin.users().lookup(sender, args[0], data -> {
             Player online = Bukkit.getPlayer(data.getUuid());
             plugin.messages().send(sender, "admin.whois-header", "player", data.getName());
-            line(sender, "UUID", data.getUuid().toString());
-            line(sender, "昵称", data.getNickname() == null ? "无" : data.getNickname());
-            line(sender, "首次登录", TimeUtil.formatDate(data.getFirstJoin()));
-            line(sender, "最后在线", online != null ? "&a当前在线" : TimeUtil.formatDate(data.getLastSeen()));
-            line(sender, "累计在线", TimeUtil.formatDuration(data.getTotalPlaytime()));
-            line(sender, "余额", String.format("%.2f", data.getBalance()));
-            line(sender, "家数量", String.valueOf(data.getHomeCount()));
+            line(sender, "uuid", data.getUuid().toString());
+            line(sender, "nickname", data.getNickname() == null
+                    ? MessageManager.localized("general.none") : data.getNickname());
+            line(sender, "first-join", TimeUtil.date(data.getFirstJoin()));
+            line(sender, "last-seen", online != null
+                    ? MessageManager.localized("admin.whois-online") : TimeUtil.date(data.getLastSeen()));
+            line(sender, "playtime", TimeUtil.duration(data.getTotalPlaytime()));
+            line(sender, "balance", String.format("%.2f", data.getBalance()));
+            line(sender, "homes", String.valueOf(data.getHomeCount()));
             if (online != null) {
-                line(sender, "位置", LocationUtil.describe(online.getLocation()));
-                line(sender, "延迟", online.getPing() + "ms");
-                line(sender, "游戏模式", online.getGameMode().name());
+                line(sender, "location", LocationUtil.describe(online.getLocation()));
+                line(sender, "ping", online.getPing() + "ms");
+                line(sender, "gamemode", MessageManager.localized(
+                        "player.gamemode-" + online.getGameMode().name().toLowerCase(Locale.ROOT)));
             }
             if (data.isBanned()) {
-                line(sender, "&c封禁", data.getBanReason() + " &7(由 " + data.getBanSource() + ")");
+                line(sender, "ban", MessageManager.localized("admin.whois-ban-value",
+                        "reason", data.getBanReason(), "operator", data.getBanSource()));
             }
             if (data.isMuted()) {
-                line(sender, "&c禁言", data.getMuteReason() + " &7(由 " + data.getMuteSource() + ")");
+                line(sender, "mute", MessageManager.localized("admin.whois-mute-value",
+                        "reason", data.getMuteReason(), "operator", data.getMuteSource()));
             }
         });
     }
 
-    private void line(CommandSender sender, String key, String value) {
-        plugin.messages().sendRaw(sender, "&8 - &7{key}: &f{value}", "key", key, "value", value);
+    private void line(CommandSender sender, String labelId, Object value) {
+        plugin.messages().send(sender, "admin.whois-entry",
+                "label", MessageManager.localized("admin.label-" + labelId), "value", value);
     }
 
     // ------------------------------------------------------------------ 工具
@@ -310,8 +321,20 @@ public class AdminModule extends EngineModule {
         plugin.messages().send(Bukkit.getConsoleSender(), key, placeholders);
     }
 
-    private String nameOf(CommandSender sender) {
-        return sender instanceof Player player ? player.getName() : "控制台";
+    /** 空理由渲染成各语言的 admin.default-reason。 */
+    private Object reasonOf(String reason) {
+        return reason == null || reason.isEmpty()
+                ? MessageManager.localized("admin.default-reason") : reason;
+    }
+
+    private Object nameOf(CommandSender sender) {
+        return sender instanceof Player player
+                ? player.getName() : MessageManager.localized("general.console");
+    }
+
+    /** 写进玩家数据的操作者名称（存储需要固定字符串，控制台统一存 Console）。 */
+    private String storedNameOf(CommandSender sender) {
+        return sender instanceof Player player ? player.getName() : "Console";
     }
 
     private String join(String[] args, int from) {

@@ -2,6 +2,7 @@ package com.github.cinnaio.essentialengine.module.chat;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.command.CommandError;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.PlayerUtil;
@@ -87,15 +88,18 @@ public class ChatManager {
     // ------------------------------------------------------------------ 私聊
 
     public void sendPrivate(CommandSender from, Player target, String message) {
-        String senderName = from instanceof Player player ? PlayerUtil.display(player) : "控制台";
+        // 控制台名称按各接收者的语言渲染
+        Object senderName = from instanceof Player player
+                ? PlayerUtil.display(player) : MessageManager.localized("general.console");
 
         if (from instanceof Player player) {
             UserData senderData = plugin.users().get(player);
             if (senderData.isMuted()) {
                 throw new CommandError("admin.you-are-muted",
                         "reason", senderData.getMuteReason(),
-                        "time", senderData.getMuteExpiry() <= 0 ? "永久"
-                                : TimeUtil.formatDuration(senderData.getMuteExpiry() - System.currentTimeMillis()));
+                        "time", senderData.getMuteExpiry() <= 0
+                                ? MessageManager.localized("general.permanent")
+                                : TimeUtil.duration(senderData.getMuteExpiry() - System.currentTimeMillis()));
             }
             UserData targetData = plugin.users().get(target);
             if (targetData.isIgnoring(player.getUniqueId()) && !player.hasPermission("essentialengine.ignore.bypass")) {
@@ -111,13 +115,9 @@ public class ChatManager {
         targetData.setReplyTarget(from instanceof Player player ? player.getUniqueId() : null);
 
         String colored = colorize(from, message);
-        plugin.messages().sendRaw(from,
-                plugin.getConfig().getString("modules.chat.private-format-sender",
-                        "&7[&f你 &7-> &f{target}&7] &f{message}"),
+        plugin.messages().send(from, "chat.format-private-sender",
                 "target", PlayerUtil.display(target), "message", colored);
-        plugin.messages().sendRaw(target,
-                plugin.getConfig().getString("modules.chat.private-format-target",
-                        "&7[&f{sender} &7-> &f你&7] &f{message}"),
+        plugin.messages().send(target, "chat.format-private-target",
                 "sender", senderName, "message", colored);
 
         if (targetData.isAfk()) {
@@ -126,9 +126,7 @@ public class ChatManager {
         broadcastSpy(from, senderName, target.getName(), colored);
     }
 
-    private void broadcastSpy(CommandSender from, String senderName, String targetName, String message) {
-        String format = plugin.getConfig().getString("modules.chat.socialspy-format",
-                "&8[SS] &7{sender} &8-> &7{target}&8: &f{message}");
+    private void broadcastSpy(CommandSender from, Object senderName, String targetName, String message) {
         for (Player spy : Bukkit.getOnlinePlayers()) {
             if (spy.equals(from) || spy.getName().equals(targetName)) {
                 continue;
@@ -137,7 +135,7 @@ public class ChatManager {
             if (data == null || !data.isSocialSpy() || !spy.hasPermission(SPY_PERMISSION)) {
                 continue;
             }
-            plugin.messages().sendRaw(spy, format,
+            plugin.messages().send(spy, "chat.format-socialspy",
                     "sender", senderName, "target", targetName, "message", message);
         }
     }

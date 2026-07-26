@@ -1,6 +1,7 @@
 package com.github.cinnaio.essentialengine.core.command;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginIdentifiableCommand;
@@ -93,7 +94,9 @@ public class EngineCommand extends Command implements PluginIdentifiableCommand 
                 throw new CommandError("general.no-permission", "permission", permissionNode);
             }
             if (args.length < minArgs) {
-                plugin.messages().send(sender, "general.usage", "usage", usageText);
+                // 用法文本优先取语言文件的 usage.<命令名>，让参数名跟随玩家语言
+                plugin.messages().send(sender, "general.usage", "usage",
+                        MessageManager.localizedOr("usage." + getName(), usageText));
                 return true;
             }
             handler.handle(sender, label, args);

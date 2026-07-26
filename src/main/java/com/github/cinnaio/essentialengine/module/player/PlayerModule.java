@@ -2,6 +2,7 @@ package com.github.cinnaio.essentialengine.module.player;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.command.CommandError;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.user.UserData;
@@ -182,7 +183,8 @@ public class PlayerModule extends EngineModule {
             index = 1;
         }
         if (args.length <= index) {
-            throw new CommandError("general.usage", "usage", "/speed [walk|fly] <0-10> [玩家]");
+            throw new CommandError("general.usage", "usage",
+                    MessageManager.localizedOr("usage.speed", "/speed [walk|fly] <0-10> [player]"));
         }
         float value = Float.parseFloat(args[index]);
         if (value < 0 || value > 10) {
@@ -196,10 +198,11 @@ public class PlayerModule extends EngineModule {
         } else {
             target.setWalkSpeed(normalized);
         }
+        Object typeName = MessageManager.localized(flying ? "player.speed-type-fly" : "player.speed-type-walk");
         plugin.messages().send(target, "player.speed-set",
-                "type", flying ? "飞行" : "行走", "value", String.valueOf(value));
+                "type", typeName, "value", String.valueOf(value));
         notifyOther(sender, target, "player.speed-set",
-                "type", flying ? "飞行" : "行走", "value", String.valueOf(value));
+                "type", typeName, "value", String.valueOf(value));
     }
 
     private GameMode parseMode(String raw) {
@@ -219,13 +222,8 @@ public class PlayerModule extends EngineModule {
         notifyOther(sender, target, "player.gamemode-set", "mode", modeName(mode));
     }
 
-    private String modeName(GameMode mode) {
-        return switch (mode) {
-            case SURVIVAL -> "生存";
-            case CREATIVE -> "创造";
-            case ADVENTURE -> "冒险";
-            case SPECTATOR -> "旁观";
-        };
+    private Object modeName(GameMode mode) {
+        return MessageManager.localized("player.gamemode-" + mode.name().toLowerCase(Locale.ROOT));
     }
 
     private void repair(CommandSender sender, String label, String[] args) {
@@ -329,7 +327,7 @@ public class PlayerModule extends EngineModule {
             }
             double distance = other.getLocation().distance(player.getLocation());
             if (distance <= radius) {
-                found.add(other.getName() + "&7(" + (int) distance + "m)&f");
+                found.add(other.getName() + "&#5C6370(" + (int) distance + "m)&#E8EAED");
             }
         }
         if (found.isEmpty()) {
@@ -339,7 +337,7 @@ public class PlayerModule extends EngineModule {
         plugin.messages().send(sender, "player.near-list",
                 "radius", String.valueOf(radius),
                 "count", String.valueOf(found.size()),
-                "players", String.join("&7, &f", found));
+                "players", String.join("&#5C6370, &#E8EAED", found));
     }
 
     private void ping(CommandSender sender, String label, String[] args) {
@@ -354,12 +352,12 @@ public class PlayerModule extends EngineModule {
             Player player = PlayerUtil.requirePlayer(sender);
             UserData data = plugin.users().get(player);
             plugin.messages().send(sender, "player.playtime",
-                    "player", data.getName(), "time", TimeUtil.formatDuration(data.getTotalPlaytime()));
+                    "player", data.getName(), "time", TimeUtil.duration(data.getTotalPlaytime()));
             return;
         }
         plugin.users().lookup(sender, args[0], data ->
                 plugin.messages().send(sender, "player.playtime",
                         "player", data.getName(),
-                        "time", TimeUtil.formatDuration(data.getTotalPlaytime())));
+                        "time", TimeUtil.duration(data.getTotalPlaytime())));
     }
 }

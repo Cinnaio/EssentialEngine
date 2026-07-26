@@ -133,7 +133,15 @@ gradlew.bat clean shadowJar
 
 ## 消息与本地化
 
-语言文件在 `plugins/EssentialEngine/messages_zh_CN.yml`（另有 `en_US`），
-支持传统颜色代码（`&a`、`&#FF00FF`）和 MiniMessage（`<green>`、`<gradient:...>`）。
-把某条消息改成空字符串即可让插件不再发送它；
-插件更新后新增的消息键会自动回落到内置默认值，不需要删档重建。
+语言文件统一放在 `plugins/EssentialEngine/lang/`，内置 `zh_CN.yml` 与 `en_US.yml`。
+
+- **自动跟随客户端语言**：中文客户端（`zh_*`）看到 zh_CN，其余语言回退到 en_US；
+  控制台使用 config.yml 的 `language`。往 `lang/` 里添加 `ja_JP.yml` 之类的文件，
+  对应语言的客户端会自动匹配，无需任何配置。
+- **无前缀、统一配色**：消息使用 MiniMessage 十六进制配色
+  （成功 `#7BC96F`、失败 `#E06C75`、警告 `#E5C07B`、主色 `#61AFEF`、
+  正文 `#E8EAED`、次要 `#8B95A5`、弱化 `#5C6370`）。
+- 把某条消息改成空字符串即可让插件不再发送它；
+  插件更新后新增的消息键会自动回落到内置默认值，不需要删档重建。
+- 「永久」「控制台」、时长（`3天2小时` / `3d 2h`）等占位符值
+  也会按每位接收者的语言分别渲染——同一条广播，中英文玩家各看各的语言。

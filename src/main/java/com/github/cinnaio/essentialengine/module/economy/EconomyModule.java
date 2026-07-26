@@ -2,6 +2,7 @@ package com.github.cinnaio.essentialengine.module.economy;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.command.CommandError;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.user.UserData;
@@ -140,7 +141,8 @@ public class EconomyModule extends EngineModule {
         double amount = 0;
         if (!action.equals("reset")) {
             if (args.length < 3) {
-                throw new CommandError("general.usage", "usage", "/eco <give|take|set> <玩家> <金额>");
+                throw new CommandError("general.usage", "usage",
+                        MessageManager.localizedOr("usage.eco", "/eco <give|take|set|reset> <player> [amount]"));
             }
             amount = EconomyManager.round(Double.parseDouble(args[2]));
             if (amount < 0) {
@@ -156,8 +158,8 @@ public class EconomyModule extends EngineModule {
                 case "set" -> data.setBalance(value);
                 case "reset" -> data.setBalance(economy.startingBalance());
                 default -> {
-                    plugin.messages().send(sender, "general.usage",
-                            "usage", "/eco <give|take|set|reset> <玩家> [金额]");
+                    plugin.messages().send(sender, "general.usage", "usage",
+                            MessageManager.localizedOr("usage.eco", "/eco <give|take|set|reset> <player> [amount]"));
                     return;
                 }
             }
@@ -223,7 +225,7 @@ public class EconomyModule extends EngineModule {
             }
             plugin.messages().send(sender, "economy.kit-list",
                     "count", String.valueOf(available.size()),
-                    "kits", String.join("&7, &f", available));
+                    "kits", String.join("&#5C6370, &#E8EAED", available));
             return;
         }
 
@@ -234,7 +236,8 @@ public class EconomyModule extends EngineModule {
                 throw new CommandError("general.no-permission", "permission", PERM + "kit.admin");
             }
             if (args.length < 2) {
-                throw new CommandError("general.usage", "usage", "/kit create <名称> [冷却秒数]");
+                throw new CommandError("general.usage", "usage",
+                        MessageManager.localizedOr("usage.kit-create", "/kit create <name> [cooldown seconds]"));
             }
             long cooldown = args.length > 2 ? Long.parseLong(args[2]) : 0L;
             kits.createFromInventory(player, args[1], cooldown);
@@ -246,7 +249,8 @@ public class EconomyModule extends EngineModule {
                 throw new CommandError("general.no-permission", "permission", PERM + "kit.admin");
             }
             if (args.length < 2) {
-                throw new CommandError("general.usage", "usage", "/kit delete <名称>");
+                throw new CommandError("general.usage", "usage",
+                        MessageManager.localizedOr("usage.kit-delete", "/kit delete <name>"));
             }
             if (!kits.delete(args[1])) {
                 throw new CommandError("economy.kit-not-found", "name", args[1]);

@@ -91,7 +91,7 @@ public class KitManager {
             long ready = used + cooldown * 1000L;
             if (System.currentTimeMillis() < ready) {
                 throw new CommandError("economy.kit-cooldown",
-                        "name", name, "time", TimeUtil.formatDuration(ready - System.currentTimeMillis()));
+                        "name", name, "time", TimeUtil.duration(ready - System.currentTimeMillis()));
             }
         }
 

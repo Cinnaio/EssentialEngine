@@ -26,6 +26,8 @@ public class UserData {
 
     private String name = "";
     private String nickname;
+    /** 客户端语言标签（如 zh_cn），用于登录拦截画面等客户端设置尚未同步的场景。 */
+    private String clientLocale;
     private double balance;
     private long firstJoin;
     private long lastLogin;
@@ -107,6 +109,20 @@ public class UserData {
     /** 展示用名字：有昵称用昵称，否则用玩家名。 */
     public String getDisplayName() {
         return nickname == null ? name : nickname;
+    }
+
+    /** 最近一次同步到的客户端语言标签（小写，如 zh_cn），未知时返回 null。 */
+    public String getClientLocale() {
+        return clientLocale;
+    }
+
+    public void setClientLocale(String value) {
+        String normalized = value == null || value.isEmpty()
+                ? null : value.toLowerCase(Locale.ROOT).replace('-', '_');
+        if (!java.util.Objects.equals(this.clientLocale, normalized)) {
+            this.clientLocale = normalized;
+            markDirty();
+        }
     }
 
     public double getBalance() {
@@ -461,6 +477,9 @@ public class UserData {
         if (nickname != null) {
             map.put("nickname", nickname);
         }
+        if (clientLocale != null) {
+            map.put("locale", clientLocale);
+        }
         map.put("balance", balance);
         map.put("first-join", firstJoin);
         map.put("last-login", lastLogin);
@@ -522,6 +541,7 @@ public class UserData {
         }
         data.name = str(map.get("name"), "");
         data.nickname = map.get("nickname") == null ? null : str(map.get("nickname"), null);
+        data.clientLocale = map.get("locale") == null ? null : str(map.get("locale"), null);
         data.balance = num(map.get("balance"), 0D);
         data.firstJoin = (long) num(map.get("first-join"), 0D);
         data.lastLogin = (long) num(map.get("last-login"), 0D);

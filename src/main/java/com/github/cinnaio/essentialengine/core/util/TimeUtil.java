@@ -28,6 +28,35 @@ public final class TimeUtil {
     private TimeUtil() {
     }
 
+    // ------------------------------------------------------------------ 本地化占位符
+    //
+    // 时长 / 时间放进消息占位符时不要直接传格式化好的字符串（那样只有一种语言），
+    // 而是传下面这些标记对象，由 MessageManager 在发送时按接收者的语言渲染。
+
+    /** 一段时长，按接收者语言渲染成「3天2小时」或「3d 2h」。 */
+    public record Duration(long millis) {
+    }
+
+    /** 一个时间点；无效（&le;0）时渲染成语言文件里的 time.never。 */
+    public record DateTime(long timestamp) {
+    }
+
+    /** 距今多久之前，按接收者语言渲染成「3小时前」或「3h ago」。 */
+    public record Ago(long timestamp) {
+    }
+
+    public static Duration duration(long millis) {
+        return new Duration(millis);
+    }
+
+    public static DateTime date(long timestamp) {
+        return new DateTime(timestamp);
+    }
+
+    public static Ago ago(long timestamp) {
+        return new Ago(timestamp);
+    }
+
     /**
      * 解析时长字符串，返回毫秒数。
      *
@@ -73,7 +102,11 @@ public final class TimeUtil {
         };
     }
 
-    /** 把毫秒格式化成中文可读时长，例如 {@code 3天2小时5分钟}。 */
+    /**
+     * 把毫秒格式化成中文可读时长，例如 {@code 3天2小时5分钟}。
+     *
+     * <p>注意：发给玩家的消息不要用这个（只有中文），请改传 {@link #duration(long)}。</p>
+     */
     public static String formatDuration(long millis) {
         if (millis <= 0) {
             return "0秒";

@@ -206,7 +206,7 @@ public class TeleportManager {
         Long until = map.get(type);
         if (until != null && until > System.currentTimeMillis()) {
             throw new CommandError("teleport.cooldown",
-                    "time", TimeUtil.formatDuration(until - System.currentTimeMillis()));
+                    "time", TimeUtil.duration(until - System.currentTimeMillis()));
         }
     }
 

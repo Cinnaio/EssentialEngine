@@ -1,8 +1,8 @@
 package com.github.cinnaio.essentialengine.module.admin;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.user.UserData;
-import com.github.cinnaio.essentialengine.core.util.Text;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -29,14 +29,17 @@ public class AdminListener implements Listener {
         if (data == null || !data.isBanned()) {
             return;
         }
-        String duration = data.getBanExpiry() <= 0
-                ? "永久"
-                : TimeUtil.formatDuration(data.getBanExpiry() - System.currentTimeMillis());
-        String message = plugin.messages().raw("admin.ban-screen",
-                "reason", data.getBanReason(),
-                "operator", data.getBanSource(),
-                "duration", duration);
-        event.disallow(PlayerLoginEvent.Result.KICK_BANNED, Text.legacy(message));
+        Object duration = data.getBanExpiry() <= 0
+                ? MessageManager.localized("general.permanent")
+                : TimeUtil.duration(data.getBanExpiry() - System.currentTimeMillis());
+        String reason = data.getBanReason();
+        // 封禁画面按被拦玩家的客户端语言渲染
+        event.disallow(PlayerLoginEvent.Result.KICK_BANNED,
+                plugin.messages().get(event.getPlayer(), "admin.ban-screen",
+                        "reason", reason == null || reason.isEmpty()
+                                ? MessageManager.localized("admin.default-reason") : reason,
+                        "operator", data.getBanSource(),
+                        "duration", duration));
     }
 
     @EventHandler(priority = EventPriority.NORMAL)

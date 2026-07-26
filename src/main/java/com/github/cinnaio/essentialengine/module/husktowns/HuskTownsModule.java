@@ -2,6 +2,7 @@ package com.github.cinnaio.essentialengine.module.husktowns;
 
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.command.CommandError;
+import com.github.cinnaio.essentialengine.core.config.MessageManager;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
@@ -37,7 +38,7 @@ public class HuskTownsModule extends EngineModule {
 
     @Override
     public String getUnavailableReason() {
-        return "服务器未安装 HuskTowns";
+        return "husktowns.not-installed";
     }
 
     @Override
@@ -64,25 +65,27 @@ public class HuskTownsModule extends EngineModule {
             }
             plugin.messages().send(sender, "husktowns.town-list",
                     "count", String.valueOf(names.size()),
-                    "towns", String.join("&7, &f", names));
+                    "towns", String.join("&#5C6370, &#E8EAED", names));
             return;
         }
         if (args.length < 2) {
-            throw new CommandError("general.usage", "usage", "/eetown info <名称>");
+            throw new CommandError("general.usage", "usage",
+                    MessageManager.localizedOr("usage.eetown-info", "/eetown info <name>"));
         }
         Map<String, Object> town = service.getTown(args[1]);
         if (town == null) {
             throw new CommandError("husktowns.town-not-found", "name", args[1]);
         }
         plugin.messages().send(sender, "husktowns.town-header", "name", String.valueOf(town.get("name")));
-        line(sender, "等级", String.valueOf(town.get("level")));
-        line(sender, "成员数", String.valueOf(town.get("memberCount")));
-        line(sender, "金库", String.valueOf(town.get("money")));
-        line(sender, "欢迎语", String.valueOf(town.get("greeting")));
+        line(sender, "level", String.valueOf(town.get("level")));
+        line(sender, "members", String.valueOf(town.get("memberCount")));
+        line(sender, "money", String.valueOf(town.get("money")));
+        line(sender, "greeting", String.valueOf(town.get("greeting")));
     }
 
-    private void line(CommandSender sender, String key, String value) {
-        plugin.messages().sendRaw(sender, "&8 - &7{key}: &f{value}", "key", key, "value", value);
+    private void line(CommandSender sender, String labelId, String value) {
+        plugin.messages().send(sender, "husktowns.town-entry",
+                "label", MessageManager.localized("husktowns.label-" + labelId), "value", value);
     }
 
     private List<String> complete(CommandSender sender, String[] args) {

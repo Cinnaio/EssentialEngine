@@ -124,10 +124,9 @@ public class EssentialsEndpoint {
             }
             String message = json.get("message").getAsString();
             Boolean done = MainThread.call(plugin, () -> {
-                String format = plugin.getConfig().getString("modules.chat.broadcast-format",
-                        "&8[&c广播&8] &f{message}");
+                // 广播前缀跟随各接收者的语言（chat.format-broadcast）
                 for (Player player : Bukkit.getOnlinePlayers()) {
-                    plugin.messages().sendRaw(player, format, "message", message);
+                    plugin.messages().send(player, "chat.format-broadcast", "message", message);
                 }
                 return true;
             }, false);

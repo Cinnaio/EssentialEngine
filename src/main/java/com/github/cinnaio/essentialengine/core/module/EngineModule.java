@@ -52,9 +52,9 @@ public abstract class EngineModule {
         return true;
     }
 
-    /** 依赖不满足时展示给服主的原因。 */
+    /** 依赖不满足时的原因。可以返回语言文件里的键（推荐）或字面文本。 */
     public String getUnavailableReason() {
-        return "前置插件未安装";
+        return "core.dependency-missing";
     }
 
     /** 声明命令与监听器。由 ModuleManager 在启用时调用。 */
