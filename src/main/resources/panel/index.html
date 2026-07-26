@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>EssentialEngine 管理面板</title>
+<style>
+/* ============================================================
+   EssentialEngine 管理面板
+   风格：iOS「液态玻璃」—— 极光背景 + 分层磨砂玻璃面板
+   全部资源内联，不引用任何外部 CDN（服务器通常没有外网出口，
+   且面板的 CSP 是 default-src 'self'）
+   ============================================================ */
+
+:root{
+  --font-ui: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+             "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+
+  /* iOS 浅色模式的系统色 */
+  --accent: #007AFF;
+  --accent-2: #34C759;
+  --danger: #FF3B30;
+  --warn: #FF9500;
+
+  --radius-xl: 28px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+
+  /* iOS 的弹性缓动 */
+  --spring: cubic-bezier(.32,.72,0,1);
+}
+
+/* ---- 浅色主题 ----
+   刻意不跟随系统深色：整套配色是照着 iOS 浅色模式调的，
+   玻璃的通透感来自「高亮度白 + 顶部高光边 + 带蓝的柔和投影」，
+   换到深色底上这套数值就不成立了。 */
+:root{
+  --bg: #e6eaf2;
+  --text: #10131a;
+  --text-2: rgba(60,60,67,.66);
+  --text-3: rgba(60,60,67,.42);
+  --glass: rgba(255,255,255,.72);
+  --glass-2: rgba(255,255,255,.56);
+  --hairline: rgba(16,24,48,.08);
+  --highlight: rgba(255,255,255,.95);
+  --field: rgba(255,255,255,.88);
+  --track: rgba(120,120,128,.26);
+  --shadow: 0 10px 34px rgba(38,54,102,.13);
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; }
+body{
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  letter-spacing:-.01em;
+}
+
+/* ---- 极光背景：几团缓慢漂移的色斑，玻璃面板下面透出的就是它 ---- */
+.aurora{ position:fixed; inset:0; z-index:-1; overflow:hidden; }
+.aurora i{
+  position:absolute; display:block; border-radius:50%;
+  filter: blur(90px); opacity:.55; will-change: transform;
+}
+/* 浅色底上要用饱和度够高的粉彩：太淡的话玻璃和背景就分不开了 */
+.aurora i:nth-child(1){ width:52vw; height:52vw; left:-10vw; top:-12vw;
+  background:#6FB1FF; animation: drift1 26s var(--spring) infinite alternate; }
+.aurora i:nth-child(2){ width:44vw; height:44vw; right:-8vw; top:6vh;
+  background:#6FE0A6; animation: drift2 32s var(--spring) infinite alternate; }
+.aurora i:nth-child(3){ width:40vw; height:40vw; left:22vw; bottom:-16vw;
+  background:#C3A2FF; animation: drift3 29s var(--spring) infinite alternate; }
+.aurora i:nth-child(4){ width:30vw; height:30vw; right:16vw; bottom:-6vw;
+  background:#FFC978; opacity:.42; animation: drift1 35s var(--spring) infinite alternate-reverse; }
+@keyframes drift1{ to{ transform:translate3d(12vw,8vh,0) scale(1.18);} }
+@keyframes drift2{ to{ transform:translate3d(-14vw,12vh,0) scale(.86);} }
+@keyframes drift3{ to{ transform:translate3d(10vw,-10vh,0) scale(1.12);} }
+@media (prefers-reduced-motion: reduce){ .aurora i{ animation:none; } }
+
+/* ---- 玻璃基类 ---- */
+.glass{
+  background: var(--glass);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    inset 0 1px 0 0 var(--highlight),
+    inset 0 0 0 1px var(--hairline),
+    var(--shadow);
+}
+
+/* ============================ 登录 ============================ */
+#login{
+  min-height:100dvh; display:grid; place-items:center; padding:24px;
+}
+.login-card{
+  width:min(400px,100%); padding:40px 34px 34px;
+  border-radius: var(--radius-xl);
+  animation: rise .7s var(--spring) both;
+}
+@keyframes rise{ from{ opacity:0; transform:translateY(22px) scale(.97);} }
+.mark{
+  width:60px; height:60px; border-radius:19px; margin:0 auto 20px;
+  background:linear-gradient(150deg,var(--accent),var(--accent-2));
+  display:grid; place-items:center; font-size:29px; font-weight:700; color:#fff;
+  box-shadow:0 10px 26px rgba(10,132,255,.38), inset 0 1px 0 rgba(255,255,255,.4);
+}
+.login-card h1{ font-size:23px; font-weight:640; text-align:center; letter-spacing:-.02em; }
+.login-card p{ font-size:13.5px; color:var(--text-2); text-align:center; margin:7px 0 26px; }
+
+/* ============================ 布局 ============================ */
+#app{ display:none; min-height:100dvh; padding:20px; gap:20px; }
+#app.on{ display:grid; grid-template-columns:236px 1fr; }
+@media (max-width:860px){ #app.on{ grid-template-columns:1fr; } }
+
+aside{ position:sticky; top:20px; align-self:start; padding:18px 14px; }
+.brand{ display:flex; align-items:center; gap:11px; padding:2px 8px 18px; }
+.brand .mark{ width:34px; height:34px; border-radius:11px; font-size:17px; margin:0; box-shadow:none; }
+.brand b{ font-size:15px; font-weight:620; letter-spacing:-.02em; }
+.brand span{ display:block; font-size:11px; color:var(--text-3); font-weight:450; }
+
+nav{ display:flex; flex-direction:column; gap:3px; }
+@media (max-width:860px){ nav{ flex-direction:row; overflow-x:auto; padding-bottom:4px; } }
+.tab{
+  display:flex; align-items:center; gap:10px; width:100%;
+  padding:10px 12px; border:0; border-radius:var(--radius-md);
+  background:transparent; color:var(--text-2); font:inherit; font-size:14px; font-weight:500;
+  cursor:pointer; text-align:left; white-space:nowrap;
+  transition: background .22s var(--spring), color .22s;
+}
+.tab:hover{ background:var(--glass-2); color:var(--text); }
+.tab[aria-selected="true"]{ background:var(--glass-2); color:var(--text); font-weight:590;
+  box-shadow: inset 0 0 0 1px var(--hairline); }
+.tab .ic{ width:20px; text-align:center; font-size:15px; }
+
+main{ min-width:0; display:flex; flex-direction:column; gap:18px; }
+.view{ display:none; flex-direction:column; gap:18px; }
+.view.on{ display:flex; animation: fade .45s var(--spring) both; }
+@keyframes fade{ from{ opacity:0; transform:translateY(10px);} }
+
+.head{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  padding:4px 4px 0; }
+.head h2{ font-size:27px; font-weight:680; letter-spacing:-.03em; }
+.head p{ font-size:13px; color:var(--text-2); margin-top:3px; }
+
+/* ============================ 组件 ============================ */
+.btn{
+  border:0; border-radius:12px; padding:9px 17px; font:inherit; font-size:14px; font-weight:560;
+  background:var(--glass-2); color:var(--text); cursor:pointer;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  transition: transform .2s var(--spring), filter .2s, opacity .2s;
+}
+.btn:hover{ filter:brightness(1.14); }
+.btn:active{ transform:scale(.955); }
+.btn[disabled]{ opacity:.42; cursor:default; transform:none; }
+.btn.primary{ background:var(--accent); color:#fff; box-shadow:0 5px 16px rgba(10,132,255,.34); }
+.btn.danger{ background:rgba(255,69,58,.16); color:var(--danger); }
+.btn.sm{ padding:6px 12px; font-size:12.5px; border-radius:9px; }
+.btn.wide{ width:100%; padding:13px; font-size:15px; }
+
+input,textarea,select{
+  width:100%; font:inherit; font-size:14.5px; color:var(--text);
+  background:var(--field); border:0; border-radius:12px; padding:11px 14px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  transition: box-shadow .22s;
+}
+input:focus,textarea:focus,select:focus{ outline:0;
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px rgba(0,122,255,.15); }
+input.bad{ box-shadow: inset 0 0 0 1.5px var(--danger), 0 0 0 4px rgba(255,59,48,.14); }
+textarea{ resize:vertical; min-height:78px; font-family:var(--font-mono); font-size:13px; }
+::placeholder{ color:var(--text-3); }
+
+/* ---- 抹掉各家浏览器塞进来的原生控件外观 ----
+   数字框的上下箭头、密码框的小眼睛、自动填充的黄底，
+   这些默认样式和整体质感冲突，全部覆盖掉。 */
+input[type=number]{ -moz-appearance:textfield; appearance:textfield; }
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+input[type=password]::-ms-reveal,
+input[type=password]::-ms-clear{ display:none; }
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus{
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: inset 0 0 0 1px var(--hairline), inset 0 0 0 100px #fff;
+  caret-color: var(--text);
+}
+::selection{ background:rgba(0,122,255,.20); }
+:focus-visible{ outline:none; }
+*{ scrollbar-width:thin; scrollbar-color:var(--track) transparent; }
+
+/* iOS 开关 */
+.sw{ flex:none; width:51px; height:31px; border-radius:100px; border:0; padding:0; cursor:pointer;
+  background:var(--track); position:relative;
+  transition: background .3s var(--spring); }
+.sw::after{ content:""; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%;
+  background:#fff; box-shadow:0 3px 8px rgba(0,0,0,.15),0 1px 1px rgba(0,0,0,.16);
+  transition: transform .3s var(--spring); }
+.sw[data-on="true"]{ background:var(--accent-2); }
+.sw[data-on="true"]::after{ transform:translateX(20px); }
+
+.chip{ display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:100px;
+  font-size:11.5px; font-weight:560; background:var(--glass-2);
+  box-shadow: inset 0 0 0 1px var(--hairline); color:var(--text-2); }
+.chip.good{ color:var(--accent-2); background:rgba(48,209,88,.14); }
+.chip.bad{ color:var(--danger); background:rgba(255,69,58,.14); }
+.chip.warn{ color:var(--warn); background:rgba(255,159,10,.14); }
+
+/* ============================ 概览 ============================ */
+.tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:14px; }
+.tile{ padding:18px 20px; border-radius:var(--radius-lg); }
+.tile .k{ font-size:12px; color:var(--text-2); font-weight:520; }
+.tile .v{ font-size:30px; font-weight:680; letter-spacing:-.035em; margin-top:6px;
+  font-variant-numeric:tabular-nums; }
+.tile .s{ font-size:11.5px; color:var(--text-3); margin-top:2px; }
+
+.panel{ padding:20px 22px; border-radius:var(--radius-lg); }
+.panel > h3{ font-size:15px; font-weight:620; margin-bottom:14px; letter-spacing:-.01em; }
+
+.mods{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+.mod{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:12px 14px; border-radius:var(--radius-md); background:var(--glass-2);
+  box-shadow: inset 0 0 0 1px var(--hairline); }
+.mod > div{ min-width:0; }
+.mod b{ font-size:13.5px; font-weight:560; display:block;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mod small{ font-size:11px; color:var(--text-3); font-family:var(--font-mono); }
+.mod .chip{ flex:none; white-space:nowrap; }
+
+/* ============================ 配置 ============================ */
+.grp{ padding:0; border-radius:var(--radius-lg); overflow:hidden; }
+.grp > header{ padding:16px 20px 12px; }
+.grp > header b{ font-size:13px; font-weight:640; font-family:var(--font-mono); color:var(--accent); }
+.grp > header p{ font-size:12px; color:var(--text-2); margin-top:6px; white-space:pre-line; line-height:1.55; }
+.row{ display:flex; align-items:center; gap:16px; padding:13px 20px;
+  box-shadow: inset 0 1px 0 var(--hairline); }
+.row .lbl{ flex:1; min-width:0; }
+.row .lbl b{ font-size:14px; font-weight:530; display:block; }
+.row .lbl p{ font-size:11.5px; color:var(--text-3); margin-top:3px; white-space:pre-line; line-height:1.5; }
+.row .ctl{ flex:none; width:min(280px,46%); }
+.row.stack{ flex-direction:column; align-items:stretch; gap:9px; }
+.row.stack .ctl{ width:100%; }
+
+/* 底部悬浮保存条 */
+.savebar{
+  position:sticky; bottom:0; z-index:5; margin-top:4px;
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:13px 18px; border-radius:var(--radius-lg);
+  transform:translateY(140%); transition:transform .45s var(--spring);
+}
+.savebar.on{ transform:none; }
+.savebar b{ font-size:13.5px; font-weight:560; }
+
+/* ============================ 玩家 ============================ */
+.plist{ display:grid; gap:12px; }
+.pcard{ padding:16px 18px; border-radius:var(--radius-lg); display:flex; align-items:center;
+  gap:16px; flex-wrap:wrap; }
+.pcard .who{ flex:1 1 260px; min-width:0; }
+.pcard .who b{ font-size:16px; font-weight:620; letter-spacing:-.02em; }
+.pcard .meta{ display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
+.pcard .acts{ display:flex; gap:7px; flex-wrap:wrap; }
+
+/* ============================ 控制台 ============================ */
+#log{ font-family:var(--font-mono); font-size:12.5px; line-height:1.72; padding:18px 20px;
+  border-radius:var(--radius-lg); height:min(52vh,440px); overflow-y:auto;
+  white-space:pre-wrap; word-break:break-all; }
+#log .t{ color:var(--text-3); }
+#log .e{ color:var(--danger); }
+#log .o{ color:var(--accent-2); }
+.cmdbar{ display:flex; gap:10px; }
+.cmdbar input{ font-family:var(--font-mono); }
+
+/* ============================ 杂项 ============================ */
+.toast{
+  position:fixed; left:50%; bottom:34px; translate:-50% 0; z-index:50;
+  padding:12px 22px; border-radius:100px; font-size:14px; font-weight:530;
+  opacity:0; transform:translateY(18px) scale(.94); pointer-events:none;
+  transition:opacity .35s var(--spring), transform .35s var(--spring);
+}
+.toast.on{ opacity:1; transform:none; }
+.toast.bad{ color:var(--danger); }
+
+.empty{ text-align:center; padding:44px 20px; color:var(--text-3); font-size:14px; }
+.note{ font-size:12.5px; color:var(--text-2); line-height:1.65; }
+.note code{ font-family:var(--font-mono); font-size:11.5px; background:var(--field);
+  padding:1.5px 6px; border-radius:6px; }
+
+/* ---- 自定义对话框：取代 alert / confirm / prompt ----
+   浏览器原生弹窗长得和系统一样，样式完全不可控，
+   这里按 iOS 警告框的形态自己实现一套。 */
+#dlg{ position:fixed; inset:0; z-index:90; display:none; place-items:center; padding:24px;
+  background:rgba(118,130,158,.26); backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px); }
+#dlg.on{ display:grid; }
+.dlg-card{ width:min(332px,100%); border-radius:24px; padding:24px 22px 0; text-align:center;
+  overflow:hidden; animation:pop .38s var(--spring) both; }
+@keyframes pop{ from{ opacity:0; transform:scale(.86);} }
+.dlg-card h4{ font-size:17px; font-weight:640; letter-spacing:-.02em; }
+.dlg-card p{ font-size:13px; color:var(--text-2); margin-top:7px; line-height:1.55; }
+.dlg-card input{ margin-top:16px; text-align:center; }
+.dlg-acts{ display:flex; margin:20px -22px 0; box-shadow: inset 0 1px 0 var(--hairline); }
+.dlg-acts button{ flex:1; border:0; background:transparent; padding:14px 8px; cursor:pointer;
+  font:inherit; font-size:16px; color:var(--accent); transition:background .2s; }
+.dlg-acts button:hover{ background:var(--glass-2); }
+.dlg-acts button+button{ box-shadow: inset 1px 0 0 var(--hairline); font-weight:620; }
+.dlg-acts button.danger{ color:var(--danger); }
+
+#veil{ position:fixed; inset:0; z-index:80; display:none; place-items:center;
+  background:rgba(230,234,242,.62); backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px); }
+#veil.on{ display:grid; }
+#veil div{ text-align:center; font-size:15px; font-weight:530; }
+.spin{ width:34px; height:34px; margin:0 auto 16px; border-radius:50%;
+  border:3px solid var(--hairline); border-top-color:var(--accent);
+  animation:spin .9s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg);} }
+
+/* 滚动条 */
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-thumb{ background:var(--track); border-radius:10px;
+  border:3px solid transparent; background-clip:content-box; }
+</style>
+</head>
+<body>
+
+<div class="aurora"><i></i><i></i><i></i><i></i></div>
+
+<!-- ============================ 登录 ============================ -->
+<section id="login">
+  <!-- novalidate：关掉浏览器自带的「请填写此字段」气泡，改用页面内提示 -->
+  <form class="login-card glass" id="loginForm" novalidate>
+    <div class="mark">E</div>
+    <h1>EssentialEngine</h1>
+    <p>管理面板</p>
+    <input type="password" id="pw" placeholder="面板密码" autocomplete="current-password">
+    <button class="btn primary wide" style="margin-top:14px" type="submit" id="loginBtn">登录</button>
+    <p id="loginMsg" style="margin:14px 0 0; min-height:18px; font-size:13px; color:var(--danger)"></p>
+  </form>
+</section>
+
+<!-- ============================ 主体 ============================ -->
+<div id="app">
+  <aside class="glass">
+    <div class="brand">
+      <div class="mark">E</div>
+      <div><b>EssentialEngine</b><span id="verTag">—</span></div>
+    </div>
+    <nav role="tablist">
+      <button class="tab" role="tab" data-view="overview" aria-selected="true"><span class="ic">◎</span>概览</button>
+      <button class="tab" role="tab" data-view="config"   aria-selected="false"><span class="ic">⚙</span>配置</button>
+      <button class="tab" role="tab" data-view="players"  aria-selected="false"><span class="ic">◍</span>玩家</button>
+      <button class="tab" role="tab" data-view="console"  aria-selected="false"><span class="ic">▶</span>控制台</button>
+    </nav>
+    <div style="margin-top:16px; padding-top:14px; box-shadow:inset 0 1px 0 var(--hairline)">
+      <button class="btn sm" style="width:100%" id="logoutBtn">退出登录</button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- 概览 -->
+    <section class="view on" id="v-overview">
+      <div class="head">
+        <div><h2>概览</h2><p id="srvLine">—</p></div>
+        <button class="btn" id="reloadBtn">重载插件</button>
+      </div>
+      <div class="tiles" id="tiles"></div>
+      <div class="panel glass">
+        <h3>模块状态</h3>
+        <div class="mods" id="mods"></div>
+      </div>
+    </section>
+
+    <!-- 配置 -->
+    <section class="view" id="v-config">
+      <div class="head">
+        <div><h2>配置</h2><p>直接编辑 config.yml，保存后需要重载才会生效</p></div>
+      </div>
+      <input id="cfgFilter" placeholder="搜索配置项…" style="max-width:320px">
+      <div id="cfgGroups" style="display:grid; gap:14px"></div>
+      <div class="savebar glass" id="saveBar">
+        <b id="dirtyCount">0 项改动</b>
+        <div style="display:flex; gap:9px">
+          <button class="btn sm" id="discardBtn">放弃</button>
+          <button class="btn primary sm" id="saveBtn">保存</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 玩家 -->
+    <section class="view" id="v-players">
+      <div class="head">
+        <div><h2>玩家</h2><p id="pCount">—</p></div>
+        <button class="btn" id="refreshPlayers">刷新</button>
+      </div>
+      <div class="plist" id="plist"></div>
+    </section>
+
+    <!-- 控制台 -->
+    <section class="view" id="v-console">
+      <div class="head"><div><h2>控制台</h2><p>以控制台身份执行命令</p></div></div>
+      <div id="log" class="glass"></div>
+      <div class="cmdbar">
+        <input id="cmd" placeholder="输入命令，回车执行（不用带 /）" autocomplete="off">
+        <button class="btn primary" id="runBtn">执行</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast glass" id="toast"></div>
+<div id="veil"><div><div class="spin"></div><span id="veilText">处理中…</span></div></div>
+
+<div id="dlg" role="dialog" aria-modal="true">
+  <div class="dlg-card glass">
+    <h4 id="dlgTitle"></h4>
+    <p id="dlgMsg"></p>
+    <input id="dlgInput" style="display:none">
+    <div class="dlg-acts">
+      <button type="button" id="dlgNo">取消</button>
+      <button type="button" id="dlgYes">确定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ------------------------------------------------------------------
+   说明：所有来自服务端的字符串一律用 textContent / value 写入，
+   全程不用 innerHTML 拼接数据，避免玩家名或配置值里的内容被当成 HTML。
+   ------------------------------------------------------------------ */
+
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+const store = {
+  get token(){ return sessionStorage.getItem("ee_panel_token"); },
+  set token(v){ v ? sessionStorage.setItem("ee_panel_token", v) : sessionStorage.removeItem("ee_panel_token"); }
+};
+
+let dirty = {};      // 待保存的配置改动 path -> value
+let cfgCache = null; // 最近一次拉到的配置树
+
+/* ---------------------------- 网络 ---------------------------- */
+async function api(path, method = "GET", body){
+  const res = await fetch("/api" + path, {
+    method,
+    headers: Object.assign(
+      { "Accept": "application/json" },
+      body ? { "Content-Type": "application/json" } : {},
+      store.token ? { "Authorization": "Bearer " + store.token } : {}
+    ),
+    body: body ? JSON.stringify(body) : undefined
+  });
+  let data = null;
+  try { data = await res.json(); } catch(_){ /* 非 JSON 响应 */ }
+  if (res.status === 401){ store.token = null; showLogin("会话已过期，请重新登录"); throw new Error("unauthorized"); }
+  if (!res.ok || (data && data.success === false)) throw new Error((data && data.message) || ("HTTP " + res.status));
+  return data ? data.data : null;
+}
+
+/* ---------------------------- 提示 ---------------------------- */
+let toastTimer;
+function toast(msg, bad){
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.toggle("bad", !!bad);
+  el.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("on"), 2600);
+}
+const veil = (on, text) => { $("#veilText").textContent = text || "处理中…"; $("#veil").classList.toggle("on", !!on); };
+
+/* ---------------------------- 对话框 ----------------------------
+   取代浏览器原生的 confirm / prompt。
+   ask({title, message})                 → Promise<boolean>
+   ask({title, input:true, value, ...})  → Promise<string|null>（取消为 null）
+   ------------------------------------------------------------- */
+let dlgResolve = null;
+function ask(opts){
+  const o = opts || {};
+  const box = $("#dlg"), input = $("#dlgInput"), yes = $("#dlgYes"), no = $("#dlgNo");
+
+  $("#dlgTitle").textContent = o.title || "";
+  $("#dlgMsg").textContent = o.message || "";
+  $("#dlgMsg").style.display = o.message ? "" : "none";
+
+  input.style.display = o.input ? "" : "none";
+  input.value = o.value == null ? "" : String(o.value);
+  input.placeholder = o.placeholder || "";
+  input.type = o.numeric ? "number" : "text";
+
+  yes.textContent = o.confirmText || "确定";
+  no.textContent = o.cancelText || "取消";
+  yes.classList.toggle("danger", !!o.danger);
+
+  box.classList.add("on");
+  setTimeout(() => (o.input ? input : yes).focus(), 60);
+
+  return new Promise(resolve => {
+    dlgResolve = value => {
+      box.classList.remove("on");
+      dlgResolve = null;
+      resolve(value);
+    };
+  });
+}
+$("#dlgYes").addEventListener("click", () => {
+  if (!dlgResolve) return;
+  const input = $("#dlgInput");
+  dlgResolve(input.style.display === "none" ? true : input.value);
+});
+$("#dlgNo").addEventListener("click", () => {
+  if (!dlgResolve) return;
+  dlgResolve($("#dlgInput").style.display === "none" ? false : null);
+});
+$("#dlgInput").addEventListener("keydown", e => { if (e.key === "Enter") $("#dlgYes").click(); });
+document.addEventListener("keydown", e => {
+  if (!dlgResolve) return;
+  if (e.key === "Escape") $("#dlgNo").click();
+});
+
+/* ---------------------------- 登录 ---------------------------- */
+function showLogin(msg){
+  $("#app").classList.remove("on");
+  $("#login").style.display = "grid";
+  $("#loginMsg").textContent = msg || "";
+  $("#pw").value = "";
+}
+function showApp(){
+  $("#login").style.display = "none";
+  $("#app").classList.add("on");
+  loadOverview();
+}
+
+$("#loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const pw = $("#pw");
+  if (!pw.value){
+    pw.classList.add("bad");
+    $("#loginMsg").textContent = "请输入面板密码";
+    pw.focus();
+    return;
+  }
+  pw.classList.remove("bad");
+  $("#loginMsg").textContent = "";
+  const btn = $("#loginBtn");
+  btn.disabled = true;
+  try{
+    const data = await api("/login", "POST", { password: $("#pw").value });
+    store.token = data.token;
+    showApp();
+  }catch(err){
+    $("#loginMsg").textContent = err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+$("#logoutBtn").addEventListener("click", async () => {
+  try{ await api("/logout", "POST"); }catch(_){}
+  store.token = null;
+  showLogin("已退出登录");
+});
+
+/* ---------------------------- 导航 ---------------------------- */
+$$(".tab").forEach(tab => tab.addEventListener("click", () => {
+  $$(".tab").forEach(t => t.setAttribute("aria-selected", String(t === tab)));
+  const view = tab.dataset.view;
+  $$(".view").forEach(v => v.classList.toggle("on", v.id === "v-" + view));
+  if (view === "overview") loadOverview();
+  if (view === "config" && !cfgCache) loadConfig();
+  if (view === "players") loadPlayers();
+}));
+
+/* ---------------------------- 概览 ---------------------------- */
+function tile(k, v, s){
+  const el = document.createElement("div");
+  el.className = "tile glass";
+  const kd = document.createElement("div"); kd.className = "k"; kd.textContent = k;
+  const vd = document.createElement("div"); vd.className = "v"; vd.textContent = v;
+  el.append(kd, vd);
+  if (s){ const sd = document.createElement("div"); sd.className = "s"; sd.textContent = s; el.append(sd); }
+  return el;
+}
+
+async function loadOverview(){
+  let d;
+  try{ d = await api("/overview"); }catch(_){ return; }
+
+  $("#verTag").textContent = "v" + d.pluginVersion;
+  $("#srvLine").textContent =
+    d.serverVersion + (d.folia ? " · Folia" : "") + " · 存储 " + d.storage + (d.vaultHooked ? " · Vault 已接管" : "");
+
+  const tiles = $("#tiles");
+  tiles.textContent = "";
+  tiles.append(
+    tile("在线玩家", d.onlinePlayers + " / " + d.maxPlayers),
+    tile("TPS", d.tps < 0 ? "—" : d.tps.toFixed(2), d.tps < 0 ? "Folia 不提供" : ""),
+    tile("内存", d.memory.usedMB + " MB", "上限 " + d.memory.maxMB + " MB"),
+    tile("运行时长", d.uptime),
+    tile("活动会话", String(d.sessions), "面板登录数")
+  );
+
+  const mods = $("#mods");
+  mods.textContent = "";
+  d.modules.forEach(m => {
+    const row = document.createElement("div"); row.className = "mod";
+    const left = document.createElement("div");
+    const b = document.createElement("b"); b.textContent = m.name;
+    const s = document.createElement("small"); s.textContent = m.id;
+    left.append(b, s);
+    const chip = document.createElement("span");
+    chip.className = "chip " + (m.enabled ? "good" : (m.available ? "" : "warn"));
+    chip.textContent = m.enabled ? "已启用" : (m.available ? "已关闭" : "不可用");
+    row.append(left, chip);
+    mods.append(row);
+  });
+}
+
+$("#pw").addEventListener("input", () => $("#pw").classList.remove("bad"));
+
+$("#reloadBtn").addEventListener("click", async () => {
+  const go = await ask({
+    title: "重载插件",
+    message: "会重启全部模块。面板本身也会短暂中断，之后需要重新登录。",
+    confirmText: "重载", danger: true
+  });
+  if (!go) return;
+  try{ await api("/reload", "POST"); }catch(err){ toast(err.message, true); return; }
+  veil(true, "正在重载…");
+  // 面板服务会被停掉再拉起，这里轮询 ping 等它回来
+  let tries = 0;
+  const timer = setInterval(async () => {
+    tries++;
+    try{
+      const res = await fetch("/api/ping");
+      if (res.ok){ clearInterval(timer); veil(false); store.token = null; showLogin("重载完成，请重新登录"); }
+    }catch(_){ /* 还没起来 */ }
+    if (tries > 40){ clearInterval(timer); veil(false); toast("重载超时，请查看控制台", true); }
+  }, 1000);
+});
+
+/* ---------------------------- 配置 ---------------------------- */
+function markDirty(){
+  const n = Object.keys(dirty).length;
+  $("#dirtyCount").textContent = n + " 项改动";
+  $("#saveBar").classList.toggle("on", n > 0);
+}
+
+function control(entry){
+  const wrap = document.createElement("div");
+  wrap.className = "ctl";
+
+  if (entry.type === "boolean"){
+    const sw = document.createElement("button");
+    sw.type = "button"; sw.className = "sw";
+    sw.dataset.on = String(entry.value === true);
+    sw.setAttribute("role", "switch");
+    sw.setAttribute("aria-checked", sw.dataset.on);
+    sw.addEventListener("click", () => {
+      const next = sw.dataset.on !== "true";
+      sw.dataset.on = String(next);
+      sw.setAttribute("aria-checked", String(next));
+      if (next === entry.value) delete dirty[entry.path]; else dirty[entry.path] = next;
+      markDirty();
+    });
+    wrap.style.width = "auto";
+    wrap.append(sw);
+    return wrap;
+  }
+
+  let input;
+  if (entry.type === "list"){
+    input = document.createElement("textarea");
+    input.value = Array.isArray(entry.value) ? entry.value.join("\n") : "";
+    input.placeholder = "每行一项，留空表示不限制";
+  }else{
+    input = document.createElement("input");
+    if (entry.sensitive){
+      input.type = "password";
+      input.placeholder = entry.hasValue ? "已设置，留空则不修改" : "尚未设置";
+      input.autocomplete = "new-password";
+    }else if (entry.type === "integer" || entry.type === "number"){
+      input.type = "number";
+      if (entry.type === "number") input.step = "any";
+      input.value = entry.value;
+    }else{
+      input.type = "text";
+      input.value = entry.value == null ? "" : String(entry.value);
+    }
+  }
+
+  const original = entry.type === "list"
+    ? (Array.isArray(entry.value) ? entry.value.join("\n") : "")
+    : (entry.value == null ? "" : String(entry.value));
+
+  input.addEventListener("input", () => {
+    const v = input.value;
+    // 敏感字段留空 = 保持原值，不算改动
+    if (v === original || (entry.sensitive && v === "")) delete dirty[entry.path];
+    else dirty[entry.path] = entry.type === "list" ? v.split("\n").filter(x => x.trim()) : v;
+    markDirty();
+  });
+
+  wrap.append(input);
+  return wrap;
+}
+
+function renderConfig(filter){
+  const host = $("#cfgGroups");
+  host.textContent = "";
+  const needle = (filter || "").trim().toLowerCase();
+  let shown = 0;
+
+  cfgCache.groups.forEach(group => {
+    const entries = group.entries.filter(e =>
+      !needle || e.path.toLowerCase().includes(needle) || (e.comment || "").toLowerCase().includes(needle));
+    if (!entries.length) return;
+    shown += entries.length;
+
+    const card = document.createElement("section");
+    card.className = "grp glass";
+    const header = document.createElement("header");
+    const title = document.createElement("b"); title.textContent = group.label;
+    header.append(title);
+    if (group.comment){
+      const p = document.createElement("p"); p.textContent = group.comment; header.append(p);
+    }
+    card.append(header);
+
+    entries.forEach(entry => {
+      const row = document.createElement("div");
+      row.className = "row" + (entry.type === "list" ? " stack" : "");
+      const label = document.createElement("div"); label.className = "lbl";
+      const name = document.createElement("b"); name.textContent = entry.key;
+      label.append(name);
+      if (entry.comment){
+        const desc = document.createElement("p"); desc.textContent = entry.comment; label.append(desc);
+      }
+      row.append(label, control(entry));
+      card.append(row);
+    });
+    host.append(card);
+  });
+
+  if (!shown){
+    const empty = document.createElement("div");
+    empty.className = "empty"; empty.textContent = "没有匹配的配置项";
+    host.append(empty);
+  }
+}
+
+async function loadConfig(){
+  try{
+    cfgCache = await api("/config");
+    dirty = {}; markDirty();
+    renderConfig($("#cfgFilter").value);
+  }catch(err){ toast(err.message, true); }
+}
+
+$("#cfgFilter").addEventListener("input", e => { if (cfgCache) renderConfig(e.target.value); });
+$("#discardBtn").addEventListener("click", () => { dirty = {}; markDirty(); renderConfig($("#cfgFilter").value); });
+
+$("#saveBtn").addEventListener("click", async () => {
+  if (!Object.keys(dirty).length) return;
+  const btn = $("#saveBtn"); btn.disabled = true;
+  try{
+    const res = await api("/config", "POST", { updates: dirty });
+    if (res.rejected && res.rejected.length) toast("有 " + res.rejected.length + " 项被拒绝", true);
+    else toast("已保存 " + res.changed + " 项，重载后生效");
+    await loadConfig();
+  }catch(err){ toast(err.message, true); }
+  finally{ btn.disabled = false; }
+});
+
+/* ---------------------------- 玩家 ---------------------------- */
+function chip(text, kind){
+  const el = document.createElement("span");
+  el.className = "chip" + (kind ? " " + kind : "");
+  el.textContent = text;
+  return el;
+}
+
+async function act(name, action, extra){
+  try{
+    await api("/players/" + encodeURIComponent(name) + "/action", "POST",
+      Object.assign({ action }, extra || {}));
+    toast("操作已执行");
+    loadPlayers();
+  }catch(err){ toast(err.message, true); }
+}
+
+async function loadPlayers(){
+  let list;
+  try{ list = await api("/players"); }catch(_){ return; }
+
+  $("#pCount").textContent = list.length ? ("当前 " + list.length + " 人在线") : "";
+  const host = $("#plist");
+  host.textContent = "";
+
+  if (!list.length){
+    const empty = document.createElement("div");
+    empty.className = "empty glass"; empty.textContent = "当前没有玩家在线";
+    host.append(empty);
+    return;
+  }
+
+  list.forEach(p => {
+    const card = document.createElement("div"); card.className = "pcard glass";
+    const who = document.createElement("div"); who.className = "who";
+    const nameEl = document.createElement("b"); nameEl.textContent = p.name;
+    who.append(nameEl);
+
+    const meta = document.createElement("div"); meta.className = "meta";
+    meta.append(chip(p.world), chip(p.ping + "ms"), chip(p.gamemode.toLowerCase()));
+    if (p.balance != null) meta.append(chip("余额 " + Number(p.balance).toFixed(2)));
+    if (p.playtime) meta.append(chip(p.playtime));
+    if (p.afk) meta.append(chip("挂机", "warn"));
+    if (p.vanished) meta.append(chip("隐身", "warn"));
+    if (p.muted) meta.append(chip("禁言", "bad"));
+    if (p.op) meta.append(chip("OP", "good"));
+    who.append(meta);
+
+    const acts = document.createElement("div"); acts.className = "acts";
+    const add = (text, kind, handler) => {
+      const b = document.createElement("button");
+      b.className = "btn sm" + (kind ? " " + kind : "");
+      b.textContent = text;
+      b.addEventListener("click", handler);
+      acts.append(b);
+    };
+    add("踢出", "danger", async () => {
+      const reason = await ask({ title: "踢出 " + p.name, input: true,
+        placeholder: "理由（可留空）", confirmText: "踢出", danger: true });
+      if (reason !== null) act(p.name, "kick", { reason });
+    });
+    add("封禁", "danger", async () => {
+      const reason = await ask({ title: "封禁 " + p.name,
+        message: "玩家会被立即踢下线，且无法再进入服务器。", input: true,
+        placeholder: "理由（可留空）", confirmText: "封禁", danger: true });
+      if (reason !== null) act(p.name, "ban", { reason });
+    });
+    add(p.muted ? "解除禁言" : "禁言", "", async () => {
+      if (p.muted){ act(p.name, "unmute"); return; }
+      const reason = await ask({ title: "禁言 " + p.name, input: true,
+        placeholder: "理由（可留空）", confirmText: "禁言" });
+      if (reason !== null) act(p.name, "mute", { reason });
+    });
+    add("改余额", "", async () => {
+      const amount = await ask({ title: "设置 " + p.name + " 的余额", input: true, numeric: true,
+        value: p.balance != null ? p.balance : 0, confirmText: "保存" });
+      if (amount !== null && String(amount).trim()) act(p.name, "setbalance", { amount: String(amount).trim() });
+    });
+
+    card.append(who, acts);
+    host.append(card);
+  });
+}
+$("#refreshPlayers").addEventListener("click", loadPlayers);
+
+/* ---------------------------- 控制台 ---------------------------- */
+function logLine(text, cls){
+  const el = $("#log");
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  const time = document.createElement("span");
+  time.className = "t";
+  time.textContent = new Date().toLocaleTimeString() + "  ";
+  line.append(time, document.createTextNode(text));
+  el.append(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function runCommand(){
+  const input = $("#cmd");
+  const command = input.value.trim();
+  if (!command) return;
+  input.value = "";
+  logLine("> " + command);
+  try{
+    const res = await api("/console", "POST", { command });
+    logLine(res.success ? "命令已执行" : "命令执行失败或不存在", res.success ? "o" : "e");
+  }catch(err){ logLine(err.message, "e"); }
+}
+$("#runBtn").addEventListener("click", runCommand);
+$("#cmd").addEventListener("keydown", e => { if (e.key === "Enter") runCommand(); });
+
+/* ---------------------------- 启动 ---------------------------- */
+(async function boot(){
+  if (!store.token){ showLogin(); return; }
+  try{ await api("/overview"); showApp(); }
+  catch(_){ /* api() 内部已经在 401 时切回登录页 */ }
+})();
+</script>
+</body>
+</html>

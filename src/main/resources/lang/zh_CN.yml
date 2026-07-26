@@ -49,6 +49,7 @@ core:
   module-name-husktowns: "HuskTowns 对接"
   module-name-papi: "PlaceholderAPI 变量"
   module-name-webapi: "REST API"
+  module-name-panel: "网页管理面板"
   info-header: "<#61AFEF>EssentialEngine <#8B95A5>v{version}"
   info-storage: "<#5C6370> - <#8B95A5>存储后端: <#E8EAED>{value}"
   info-server: "<#5C6370> - <#8B95A5>服务端: <#E8EAED>{value}"

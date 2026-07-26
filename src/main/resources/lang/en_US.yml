@@ -50,6 +50,7 @@ core:
   module-name-husktowns: "HuskTowns"
   module-name-papi: "PlaceholderAPI"
   module-name-webapi: "REST API"
+  module-name-panel: "Web Panel"
   info-header: "<#61AFEF>EssentialEngine <#8B95A5>v{version}"
   info-storage: "<#5C6370> - <#8B95A5>Storage: <#E8EAED>{value}"
   info-server: "<#5C6370> - <#8B95A5>Server: <#E8EAED>{value}"
