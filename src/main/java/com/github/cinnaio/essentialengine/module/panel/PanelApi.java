@@ -20,9 +20,11 @@ import org.bukkit.entity.Player;
 
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -44,14 +46,16 @@ public class PanelApi {
     private final OidcClient oidc;
     /** 头像来源模板（{name} 占位），由 {@link PanelModule} 解析配置后传入。 */
     private final List<String> avatarSources;
+    private final RecentPlayers recentPlayers;
 
     public PanelApi(EssentialEngine plugin, SessionStore sessions, ConfigService config,
-                    OidcClient oidc, List<String> avatarSources) {
+                    OidcClient oidc, List<String> avatarSources, RecentPlayers recentPlayers) {
         this.plugin = plugin;
         this.sessions = sessions;
         this.config = config;
         this.oidc = oidc;
         this.avatarSources = avatarSources;
+        this.recentPlayers = recentPlayers;
     }
 
     public void register(Router router) {
@@ -106,7 +110,8 @@ public class PanelApi {
                 ApiResponse.ok(MODULE, MainThread.call(plugin, this::overview, Map.of())));
 
         router.get("/api/players", (session, params) ->
-                ApiResponse.ok(MODULE, MainThread.call(plugin, this::players, List.of())));
+                ApiResponse.ok(MODULE, MainThread.call(plugin, this::players,
+                        Map.of("online", List.of(), "offline", List.of()))));
 
         router.post("/api/players/{name}/action", (session, params) ->
                 playerAction(params.get("name"), Router.readJson(session)));
@@ -307,9 +312,11 @@ public class PanelApi {
 
     // ------------------------------------------------------------------ 玩家
 
-    private List<Map<String, Object>> players() {
-        List<Map<String, Object>> result = new ArrayList<>();
+    private Map<String, Object> players() {
+        List<Map<String, Object>> online = new ArrayList<>();
+        Set<UUID> onlineIds = new HashSet<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
+            onlineIds.add(player.getUniqueId());
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("name", player.getName());
             item.put("uuid", player.getUniqueId().toString());
@@ -330,8 +337,11 @@ public class PanelApi {
                         plugin.messages().resolve(null, TimeUtil.duration(data.getTotalPlaytime())));
                 item.put("nickname", data.getNickname());
             }
-            result.add(item);
+            online.add(item);
         }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("online", online);
+        result.put("offline", recentPlayers.snapshot(onlineIds));
         return result;
     }
 

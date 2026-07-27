@@ -349,6 +349,13 @@ input:-webkit-autofill:focus{
 .pcard .meta{ display:flex; gap:5px; flex-wrap:wrap; }
 .pcard .acts{ display:flex; gap:6px; flex-wrap:wrap; margin-top:auto;
   padding-top:12px; box-shadow:inset 0 1px 0 var(--line); }
+/* 离线玩家：头像去色、名字压灰，和在线的一眼分开；卡片仍可点开详情 */
+.pcard.off .avatar{ filter:grayscale(1); opacity:.7; }
+.pcard.off .who b{ color:var(--text-2); }
+/* 「最近离线」分节线：横跨整个栅格 */
+.psec{ grid-column:1 / -1; display:flex; align-items:center; gap:10px;
+  margin:8px 2px -2px; font-size:12.5px; font-weight:600; color:var(--text-3); }
+.psec::after{ content:""; flex:1; height:1px; background:var(--line); }
 .pcard.tap{ cursor:pointer; transition:transform .18s var(--spring), box-shadow .18s, border-color .18s; }
 .pcard.tap:hover{ transform:translateY(-2px); border-color:rgba(15,20,25,.25);
   box-shadow:0 8px 26px rgba(15,20,25,.13); }
@@ -620,7 +627,7 @@ input:-webkit-autofill:focus{
                autocomplete="off" spellcheck="false">
         <button class="clr" id="pSearchClear" type="button" aria-label="清空搜索">✕</button>
       </div>
-      <p class="sub" id="pHint">列表显示在线玩家。要查离线玩家的余额、封禁状态或流水，在上面搜名字。</p>
+      <p class="sub" id="pHint">列表显示在线玩家和最近离线的玩家。更早没上线的玩家，在上面搜名字。</p>
       <div class="plist" id="plist"></div>
     </section>
 
@@ -1152,7 +1159,7 @@ function playerActions(p, host){
 
 function playerCard(p, offline){
   const card = document.createElement("div");
-  card.className = "pcard glass tap";
+  card.className = "pcard glass tap" + (offline ? " off" : "");
   card.tabIndex = 0;
   card.setAttribute("role", "button");
 
@@ -1161,7 +1168,8 @@ function playerCard(p, offline){
   const who = document.createElement("div"); who.className = "who";
   const nameEl = document.createElement("b"); nameEl.textContent = p.name;
   const where = document.createElement("span"); where.className = "where";
-  where.textContent = offline ? "离线"
+  where.textContent = offline
+    ? (p.lastSeenText ? "最后在线 " + p.lastSeenText : "离线")
     : p.world + " · " + p.ping + "ms · " + String(p.gamemode || "").toLowerCase();
   who.append(nameEl, where);
   top.append(who);
@@ -1194,20 +1202,29 @@ function playerCard(p, offline){
 }
 
 async function loadPlayers(){
-  let list;
-  try{ list = await api("/players"); }catch(_){ return; }
+  let d;
+  try{ d = await api("/players"); }catch(_){ return; }
+  const online = d.online || [], offline = d.offline || [];
 
-  $("#pCount").textContent = list.length ? ("当前 " + list.length + " 人在线") : "";
+  $("#pCount").textContent = "当前 " + online.length + " 人在线"
+    + (offline.length ? " · 最近离线 " + offline.length + " 人" : "");
   const host = $("#plist");
   host.textContent = "";
 
-  if (!list.length){
+  if (!online.length){
     const empty = document.createElement("div");
     empty.className = "empty glass"; empty.textContent = "当前没有玩家在线";
     host.append(empty);
-    return;
+  }else{
+    online.forEach(p => host.append(playerCard(p, false)));
   }
-  list.forEach(p => host.append(playerCard(p, false)));
+
+  if (offline.length){
+    const sec = document.createElement("div");
+    sec.className = "psec"; sec.textContent = "最近离线";
+    host.append(sec);
+    offline.forEach(p => host.append(playerCard(p, true)));
+  }
 }
 $("#refreshPlayers").addEventListener("click", refreshPlayerViews);
 

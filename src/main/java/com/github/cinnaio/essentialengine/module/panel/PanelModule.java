@@ -25,6 +25,7 @@ public class PanelModule extends EngineModule {
     private PanelServer server;
     private SessionStore sessions;
     private OidcClient oidc;
+    private RecentPlayers recentPlayers;
 
     public PanelModule(EssentialEngine plugin) {
         super(plugin, "panel", "网页管理面板");
@@ -57,9 +58,16 @@ public class PanelModule extends EngineModule {
             plugin.getLogger().warning("========================================");
         }
 
+        // 「最近离线」名单：退出时记录，供玩家页展示。历史名单异步恢复，
+        // 恢复完成前面板只是暂时看不到离线区，不值得为它拖住开服
+        this.recentPlayers = new RecentPlayers(plugin);
+        listener(recentPlayers);
+        SchedulerCompat.runAsync(plugin, recentPlayers::load);
+
         List<String> avatarSources = avatarSources();
         Router router = new Router();
-        new PanelApi(plugin, sessions, new ConfigService(plugin), oidc, avatarSources).register(router);
+        new PanelApi(plugin, sessions, new ConfigService(plugin), oidc, avatarSources, recentPlayers)
+                .register(router);
 
         HttpLogging.quietClientDisconnects(() -> plugin.getConfig().getBoolean("debug", false));
         server = new PanelServer(bindAddress, port, router, sessions,
@@ -208,6 +216,11 @@ public class PanelModule extends EngineModule {
 
     @Override
     protected void shutdown() {
+        if (recentPlayers != null) {
+            // 关服前最后一批退出排的异步落盘可能来不及跑，这里同步兜底一次
+            recentPlayers.persist();
+            recentPlayers = null;
+        }
         if (server != null) {
             server.stopServer();
             server = null;
