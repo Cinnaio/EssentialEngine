@@ -259,6 +259,15 @@ modules:
     lockout-minutes: 10
     # 是否把每次面板请求打进控制台日志
     log-requests: false
+    # 玩家头像来源，按顺序尝试，前一个加载失败自动换下一个；{name} 会被替换成玩家名。
+    # 默认先取皮肤站，再取正版头像（mc-heads）。
+    # 用别的 Blessing Skin 皮肤站时把第一条换成对应域名即可：
+    #   - "https://你的皮肤站域名/avatar/player/{name}"
+    # 注意：头像是管理员的浏览器去加载的，走的是浏览器的网络，不需要服务器有外网出口。
+    # 配成空列表 [] 则完全不加载头像。
+    avatar-sources:
+      - "https://skin.mscraft.uk/avatar/player/{name}"
+      - "https://mc-heads.net/avatar/{name}/100"
 
     # ---- OAuth / OIDC 登录（可选）----
     # 用皮肤站等 OpenID Connect 身份源登录面板，不必再单独记面板密码。

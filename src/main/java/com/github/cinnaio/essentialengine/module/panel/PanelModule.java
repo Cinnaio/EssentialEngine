@@ -57,19 +57,59 @@ public class PanelModule extends EngineModule {
             plugin.getLogger().warning("========================================");
         }
 
+        List<String> avatarSources = avatarSources();
         Router router = new Router();
-        new PanelApi(plugin, sessions, new ConfigService(plugin), oidc).register(router);
+        new PanelApi(plugin, sessions, new ConfigService(plugin), oidc, avatarSources).register(router);
 
         HttpLogging.quietClientDisconnects(() -> plugin.getConfig().getBoolean("debug", false));
         server = new PanelServer(bindAddress, port, router, sessions,
                 plugin.getLogger(), cfgBool("log-requests", false),
-                oidc == null ? null : this::handleOidcCallback);
+                oidc == null ? null : this::handleOidcCallback,
+                avatarOrigins(avatarSources));
         try {
             server.startServer();
         } catch (IOException error) {
             server = null;
             throw new IllegalStateException("管理面板启动失败，端口 " + port + " 可能已被占用", error);
         }
+    }
+
+    /**
+     * 玩家头像的来源模板（{@code {name}} 会被前端替换成玩家名）。
+     *
+     * <p>没写这个键的老配置用内置默认（皮肤站优先，正版头像兜底）；
+     * <b>显式写了空列表</b>则视为「不要头像」，两种情况要区分开。</p>
+     */
+    private List<String> avatarSources() {
+        if (!plugin.getConfig().contains(path("avatar-sources"))) {
+            return List.of(
+                    "https://skin.mscraft.uk/avatar/player/{name}",
+                    "https://mc-heads.net/avatar/{name}/100");
+        }
+        return plugin.getConfig().getStringList(path("avatar-sources")).stream()
+                .filter(entry -> entry != null && !entry.isBlank())
+                .toList();
+    }
+
+    /** 头像模板对应的源（scheme://host[:port]），逐个放进 CSP 的 img-src。 */
+    private static List<String> avatarOrigins(List<String> templates) {
+        return templates.stream()
+                .map(template -> {
+                    try {
+                        // {name} 不是合法的 URI 字符，先替换掉再解析
+                        java.net.URI uri = java.net.URI.create(template.replace("{name}", "x"));
+                        if (uri.getScheme() == null || uri.getHost() == null) {
+                            return null;
+                        }
+                        return uri.getScheme() + "://" + uri.getHost()
+                                + (uri.getPort() > 0 ? ":" + uri.getPort() : "");
+                    } catch (Exception error) {
+                        return null;
+                    }
+                })
+                .filter(origin -> origin != null)
+                .distinct()
+                .toList();
     }
 
     /** 按配置装配 OIDC 客户端；没开或配不全就保持 null。 */

@@ -44,9 +44,11 @@ public class PanelServer extends NanoHTTPD {
     private final byte[] page;
     private final byte[] logo;
     private final CallbackHandler oidcCallback;
+    private final String csp;
 
     public PanelServer(String hostname, int port, Router router, SessionStore sessions,
-                       Logger logger, boolean logRequests, CallbackHandler oidcCallback) {
+                       Logger logger, boolean logRequests, CallbackHandler oidcCallback,
+                       java.util.List<String> avatarOrigins) {
         super(hostname, port);
         this.router = router;
         this.sessions = sessions;
@@ -56,6 +58,12 @@ public class PanelServer extends NanoHTTPD {
         this.page = loadResource(PAGE_RESOURCE,
                 "<h1>panel/index.html 缺失，请重新构建插件</h1>".getBytes(StandardCharsets.UTF_8));
         this.logo = loadResource(LOGO_RESOURCE, new byte[0]);
+        // img-src 逐个放行配置的头像源，除此以外仍然只允许同源
+        String imgSrc = avatarOrigins.isEmpty()
+                ? "'self' data:"
+                : "'self' data: " + String.join(" ", avatarOrigins);
+        this.csp = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+                + "img-src " + imgSrc + "; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'";
     }
 
     /** 从 jar 里读一份资源，读不到就用兜底内容。 */
@@ -169,13 +177,12 @@ public class PanelServer extends NanoHTTPD {
      * 统一的安全响应头。
      *
      * <p>页面把样式和脚本全部内联，所以 CSP 必须放行 {@code 'unsafe-inline'}；
-     * 但 {@code default-src 'self'} 仍然挡住了一切外部请求，
+     * 但 {@code default-src 'self'} 仍然挡住了一切外部请求（唯一的例外是
+     * {@code img-src} 里按配置放行的头像源），
      * 配合 {@code frame-ancestors 'none'} 也无法被别的站点嵌进 iframe 里点击劫持。</p>
      */
     private Response harden(Response response) {
-        response.addHeader("Content-Security-Policy",
-                "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
-                        + "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'");
+        response.addHeader("Content-Security-Policy", csp);
         response.addHeader("X-Content-Type-Options", "nosniff");
         response.addHeader("X-Frame-Options", "DENY");
         response.addHeader("Referrer-Policy", "no-referrer");

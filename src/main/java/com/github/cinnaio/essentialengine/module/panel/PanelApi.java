@@ -42,23 +42,29 @@ public class PanelApi {
     private final ConfigService config;
     /** 未启用 OAuth 登录时为 null。 */
     private final OidcClient oidc;
+    /** 头像来源模板（{name} 占位），由 {@link PanelModule} 解析配置后传入。 */
+    private final List<String> avatarSources;
 
-    public PanelApi(EssentialEngine plugin, SessionStore sessions, ConfigService config, OidcClient oidc) {
+    public PanelApi(EssentialEngine plugin, SessionStore sessions, ConfigService config,
+                    OidcClient oidc, List<String> avatarSources) {
         this.plugin = plugin;
         this.sessions = sessions;
         this.config = config;
         this.oidc = oidc;
+        this.avatarSources = avatarSources;
     }
 
     public void register(Router router) {
         // ---- 公开 ----
-        // 登录页据此决定显示密码框、OAuth 按钮，还是两个都显示
+        // 登录页据此决定显示密码框、OAuth 按钮，还是两个都显示。
+        // avatars 也从这里带下去：只是几个公开图床的地址模板，不涉密。
         router.get("/api/ping", (session, params) -> ApiResponse.ok(MODULE, Map.of(
                 "ok", true,
                 "password", sessions.hasPassword(),
                 "oauth", oidc != null,
                 "oauthLabel", plugin.getConfig().getString(
-                        "modules.panel.oauth.button-text", "使用 OAuth 登录"))));
+                        "modules.panel.oauth.button-text", "使用 OAuth 登录"),
+                "avatars", avatarSources)));
 
         router.get("/api/oauth/start", (session, params) -> {
             if (oidc == null) {
