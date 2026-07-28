@@ -97,6 +97,62 @@ public class CommandManager {
         return registered;
     }
 
+    /**
+     * 把 config.yml 的 commands.override 名单里的命令强制夺回主命令名。
+     *
+     * <p>命令注册是「谁先谁占」：本插件的命令若被别的插件抢了名，就只能用
+     * {@code /essentialengine:heal} 全名调用。这里在所有插件加载完成后
+     * （由 {@code ServerLoadEvent} 触发）把名单里的命令重新指回本插件的版本，
+     * 让玩家直接输入 {@code /heal}、{@code /god} 就走本插件。</p>
+     */
+    public void applyOverrides() {
+        if (commandMap == null) {
+            return;
+        }
+        List<String> override = plugin.getConfig().getStringList("commands.override");
+        if (override.isEmpty()) {
+            return;
+        }
+        Map<String, Command> known = knownCommands();
+        if (known == null) {
+            plugin.getLogger().warning("无法获取命令表，commands.override 未生效。");
+            return;
+        }
+        boolean changed = false;
+        for (String name : override) {
+            if (name == null || name.isEmpty()) {
+                continue;
+            }
+            EngineCommand mine = findRegistered(name);
+            if (mine == null) {
+                // 命令没注册（模块关了 / 命令被 disabled），跳过即可，不必报错
+                continue;
+            }
+            String label = name.toLowerCase(Locale.ROOT);
+            Command current = known.get(label);
+            if (current == mine) {
+                continue;
+            }
+            known.put(label, mine);
+            // 让本插件的别名前缀名也指回来，避免残留旧插件的映射
+            known.put(FALLBACK_PREFIX + ":" + label, mine);
+            changed = true;
+            plugin.getLogger().info("/" + label + " 已被 commands.override 夺回，现在由本插件处理。");
+        }
+        if (changed) {
+            syncCommands();
+        }
+    }
+
+    private EngineCommand findRegistered(String name) {
+        for (EngineCommand command : registered) {
+            if (command.getName().equalsIgnoreCase(name)) {
+                return command;
+            }
+        }
+        return null;
+    }
+
     /** 注销本插件注册过的全部命令。 */
     public void unregisterAll() {
         if (commandMap == null) {

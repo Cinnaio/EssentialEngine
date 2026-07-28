@@ -11,6 +11,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerLocaleChangeEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.server.ServerLoadEvent;
 
 import java.util.Locale;
 
@@ -84,5 +85,14 @@ public class CoreListener implements Listener {
             data.setLogoutLocation(player.getLocation());
         }
         plugin.users().unload(player.getUniqueId());
+    }
+
+    /**
+     * 所有插件都 onEnable 完成后触发。此时命令名的「先到先得」已经尘埃落定，
+     * 再把 commands.override 名单里的命令夺回本插件，才能压过其它插件的同名命令。
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onServerLoad(ServerLoadEvent event) {
+        plugin.commands().applyOverrides();
     }
 }

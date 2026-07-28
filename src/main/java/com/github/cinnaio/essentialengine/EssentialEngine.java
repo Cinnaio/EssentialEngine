@@ -23,6 +23,7 @@ import com.github.cinnaio.essentialengine.module.papi.PapiModule;
 import com.github.cinnaio.essentialengine.module.player.PlayerModule;
 import com.github.cinnaio.essentialengine.module.teleport.TeleportModule;
 import com.github.cinnaio.essentialengine.module.webapi.WebApiModule;
+import com.github.cinnaio.essentialengine.module.world.WorldModule;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -165,6 +166,7 @@ public class EssentialEngine extends JavaPlugin {
         modules.register(new CoreModule(this));
         modules.register(new TeleportModule(this));
         modules.register(new PlayerModule(this));
+        modules.register(new WorldModule(this));
         modules.register(new ChatModule(this));
         modules.register(new AdminModule(this));
         modules.register(new EconomyModule(this));
@@ -235,6 +237,8 @@ public class EssentialEngine extends JavaPlugin {
         reloadConfig();
         messages.reload();
         modules.enableAll();
+        // 重载不会再触发 ServerLoadEvent，这里手动把命令覆盖名单重新应用一次
+        commands.applyOverrides();
     }
 
     // ------------------------------------------------------------------ 访问器

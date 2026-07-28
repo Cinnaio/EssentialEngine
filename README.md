@@ -16,6 +16,7 @@
 | --- | --- | --- |
 | 传送 | `teleport` | `/home` `/sethome` `/delhome` `/homes` `/warp` `/setwarp` `/delwarp` `/warps` `/spawn` `/setspawn` `/tpa` `/tpahere` `/tpaccept` `/tpdeny` `/tpacancel` `/back` `/tp` `/tphere` `/rtp` |
 | 玩家指令 | `player` | `/heal` `/feed` `/fly` `/god` `/speed` `/gamemode`（`/gms` `/gmc` `/gma` `/gmsp`） `/repair` `/hat` `/workbench` `/enderchest` `/top` `/suicide` `/near` `/ping` `/playtime` |
+| 世界控制 | `world` | `/time`（`day` `night` `noon` `midnight` `sunrise` `sunset` `set` `add` `query`） `/weather`（`clear` `rain` `thunder`） |
 | 聊天与消息 | `chat` | `/msg` `/reply` `/msgtoggle` `/socialspy` `/ignore` `/nick` `/broadcast` `/me` `/afk` `/mail` |
 | 管理与惩罚 | `admin` | `/kick` `/ban` `/tempban` `/unban` `/mute` `/tempmute` `/unmute` `/vanish` `/invsee` `/clearinventory` `/seen` `/whois` |
 | 经济与套装 | `economy` | `/balance` `/pay` `/eco` `/baltop` `/kit` |
@@ -27,6 +28,10 @@
 
 关闭某个模块后，它的命令会真正从服务端命令表里移除，不会和其它插件抢命令名。
 也可以在 `config.yml` 的 `commands.disabled` 里单独禁用某条命令、在 `commands.aliases` 里追加别名。
+
+命令注册默认「谁先注册谁占用命令名」，被别的插件抢了名就得写全名 `/essentialengine:heal`。
+想让本插件的命令强制压过同名命令，把它写进 `commands.override`（默认已含 `heal`、`god`）：
+所有插件加载完成后本插件会把这些命令名夺回来，玩家直接输入 `/heal`、`/god` 就走本插件。
 
 > **时长必须带单位。** `/tempban`、`/tempmute` 只接受 `30m`、`2h`、`7d`、`1w2d`、`30分钟`、`永久`
 > 这类写法，`/tempban 某人 7` 会被拒绝。早期版本把无单位的数字当分钟处理，

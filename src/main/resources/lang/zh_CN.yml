@@ -145,6 +145,17 @@ player:
   ping: "<green>{player} <gray>的延迟: <white>{ping}ms"
   playtime: "<green>{player} <gray>累计在线: <white>{time}"
 
+world:
+  time-set: "<white>已把 <green>{world} <white>的时间设为 <green>{time}<white>。"
+  time-query: "<white>{world} <gray>当前时间: <green>{time} <dark_gray>刻"
+  time-unknown: "<red>无法识别的时间: <white>{value} <dark_gray>(可用: day/noon/sunset/night/midnight/sunrise 或刻数)"
+  weather-set: "<white>已把 <green>{world} <white>的天气设为 <green>{weather}<white>。"
+  weather-unknown: "<red>无法识别的天气: <white>{value} <dark_gray>(可用: clear/rain/thunder)"
+  weather-clear: "晴朗"
+  weather-rain: "下雨"
+  weather-thunder: "雷暴"
+  world-not-found: "<red>找不到世界: <white>{world}"
+
 chat:
   message-self: "<red>你不能给自己发私聊。"
   no-reply-target: "<red>没有可回复的对象。"
@@ -334,6 +345,8 @@ usage:
   near: "/near [半径]"
   ping: "/ping [玩家]"
   playtime: "/playtime [玩家]"
+  time: "/time <day|night|noon|midnight|set <刻>|add <刻>|query> [世界]"
+  weather: "/weather <clear|rain|thunder> [时长] [世界]"
   msg: "/msg <玩家> <内容>"
   reply: "/reply <内容>"
   msgtoggle: "/msgtoggle"

@@ -54,6 +54,12 @@ commands:
   # 例如已经装了别的传送插件：disabled: ["tp", "tphere"]
   disabled: []
 
+  # 强制让本插件的这些命令压过其它插件的同名命令。
+  # 平时命令是「谁先注册谁占用命令名」，被别的插件占了就得写 /essentialengine:heal；
+  # 写进这里的命令会在所有插件加载完成后由本插件夺回，玩家直接输入 /heal /god 就走本插件。
+  # 只对本插件真正注册了的命令生效（对应模块要开启）。
+  override: ["heal", "god"]
+
   # 给命令追加自定义别名（原有别名仍然有效）
   aliases:
     home: []
@@ -131,6 +137,13 @@ modules:
     # 死亡时是否重置飞行 / 无敌，防止用它规避死亡惩罚
     reset-fly-on-death: false
     reset-god-on-death: false
+
+  # ---------------- 世界控制 ----------------
+  # /time /weather
+  # /time day|night|noon|midnight|sunrise|sunset、/time set <刻>、/time add <刻>、/time query
+  # /weather clear|rain|thunder [时长] [世界]
+  world:
+    enabled: true
 
   # ---------------- 聊天与消息 ----------------
   # /msg /reply /msgtoggle /socialspy /ignore /nick /broadcast /me /afk /mail

@@ -69,6 +69,10 @@ permissions:
     default: op
   essentialengine.command.speed:
     default: op
+  essentialengine.command.time:
+    default: op
+  essentialengine.command.weather:
+    default: op
   essentialengine.command.gamemode:
     default: op
   essentialengine.command.repair:

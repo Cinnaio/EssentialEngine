@@ -146,6 +146,17 @@ player:
   ping: "<green>{player}<gray>'s ping: <white>{ping}ms"
   playtime: "<green>{player}<gray>'s playtime: <white>{time}"
 
+world:
+  time-set: "<white>Set <green>{world}<white>'s time to <green>{time}<white>."
+  time-query: "<white>{world} <gray>current time: <green>{time} <dark_gray>ticks"
+  time-unknown: "<red>Unknown time: <white>{value} <dark_gray>(use: day/noon/sunset/night/midnight/sunrise or ticks)"
+  weather-set: "<white>Set <green>{world}<white>'s weather to <green>{weather}<white>."
+  weather-unknown: "<red>Unknown weather: <white>{value} <dark_gray>(use: clear/rain/thunder)"
+  weather-clear: "clear"
+  weather-rain: "rain"
+  weather-thunder: "thunder"
+  world-not-found: "<red>World not found: <white>{world}"
+
 chat:
   message-self: "<red>You can't message yourself."
   no-reply-target: "<red>Nobody to reply to."
@@ -335,6 +346,8 @@ usage:
   near: "/near [radius]"
   ping: "/ping [player]"
   playtime: "/playtime [player]"
+  time: "/time <day|night|noon|midnight|set <ticks>|add <ticks>|query> [world]"
+  weather: "/weather <clear|rain|thunder> [duration] [world]"
   msg: "/msg <player> <message>"
   reply: "/reply <message>"
   msgtoggle: "/msgtoggle"
