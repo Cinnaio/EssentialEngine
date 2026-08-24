@@ -70,7 +70,9 @@ public class PanelApi {
                 "oauth", oidc != null,
                 "oauthLabel", plugin.getConfig().getString(
                         "modules.panel.oauth.button-text", "使用 OAuth 登录"),
-                "avatars", avatarSources)));
+                "avatars", avatarSources,
+                "monitorRefreshSeconds", Math.max(0, plugin.getConfig().getInt(
+                        "modules.panel.monitor-refresh-seconds", 1)))));
 
         router.get("/api/oauth/start", (session, params) -> {
             if (oidc == null) {

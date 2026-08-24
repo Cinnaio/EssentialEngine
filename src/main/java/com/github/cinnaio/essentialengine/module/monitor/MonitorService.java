@@ -465,10 +465,27 @@ public class MonitorService {
         }
     }
 
-    /** 最近 {@code minutes} 分钟的采样，按时间正序，最多 {@code limit} 条（超出则抽稀）。 */
+    /**
+     * 最近 {@code minutes} 分钟的采样，按时间正序，最多 {@code limit} 条（超出则抽稀）。
+     *
+     * <p><b>优先走内存缓冲</b>：请求窗口若完全落在环形缓冲内（默认缓冲 8640 条采样
+     * ≈ 24 小时），直接从内存取，不碰存储——面板与 AstrBot 的高频轮询因此几乎零开销，
+     * 不会每次请求都全量扫描 JSONL / 查库。只有查很长的历史窗口时才回落到存储。</p>
+     */
     public List<PerfSample> samples(int minutes, int limit) {
-        long since = System.currentTimeMillis() - Math.max(1, minutes) * 60_000L;
         int cap = Math.max(1, Math.min(5000, limit));
+        long since = System.currentTimeMillis() - Math.max(1, minutes) * 60_000L;
+
+        synchronized (recentSamples) {
+            int intervalMillis = Math.max(1, config.sampleIntervalSeconds()) * 1000;
+            int windowSamples = (int) Math.ceil(Math.max(1, minutes) * 60_000.0 / intervalMillis);
+            if (recentSamples.size() >= windowSamples) {
+                List<PerfSample> fromMemory = new ArrayList<>(recentSamples);
+                fromMemory.removeIf(sample -> sample.timestamp() < since);
+                return downsample(fromMemory, cap);
+            }
+        }
+
         List<PerfSample> all;
         try {
             // 多取一些再抽稀：采样间隔比查询窗口小得多时，库里同窗口的数据可能远超 cap

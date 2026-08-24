@@ -1578,8 +1578,8 @@ async function loadEconomy(){
 $("#refreshEco").addEventListener("click", loadEconomy);
 
 /* ---------------------------- 性能监控 ---------------------------- */
-/** 监控页自动刷新间隔（毫秒）。仅在该页可见时轮询，切走 / 退出登录即停。 */
-const MON_REFRESH_MS = 15000;
+/** 监控页自动刷新间隔（毫秒），启动时按 modules.panel.monitor-refresh-seconds 覆盖；0 表示关闭。 */
+let monRefreshMs = 1000;
 let monTimer = null;
 /** 监控页加载失败是否已经提示过（自动刷新期间不重复弹错误，恢复后重置）。 */
 let monErrorShown = false;
@@ -1587,11 +1587,12 @@ function stopMonAutoRefresh(){
   if (monTimer){ clearInterval(monTimer); monTimer = null; }
 }
 function startMonAutoRefresh(){
-  if (monTimer) return;
+  stopMonAutoRefresh();
+  if (monRefreshMs <= 0) return;
   monTimer = setInterval(() => {
     // 浏览器标签页在后台时不刷；视图切走后定时器本身也会被停掉
     if (!document.hidden && $("#v-monitor").classList.contains("on")) loadMonitor();
-  }, MON_REFRESH_MS);
+  }, monRefreshMs);
 }
 function monTime(ts){
   if (!ts || ts <= 0) return "-";
@@ -1680,8 +1681,10 @@ async function loadMonitor(){
   const tps = d.tps || {}, mem = d.memory || {}, cfg = d.config || {};
   const counters = d.counters || {};
   const totalEvents = Object.values(counters).reduce((a, b) => a + b, 0);
+  const refreshText = monRefreshMs > 0
+    ? "每 " + (monRefreshMs / 1000) + " 秒自动刷新" : "手动刷新";
   $("#monLine").textContent = "采样间隔 " + (cfg.sampleIntervalSeconds || 10) + " 秒 · 卡顿阈值 TPS "
-    + (cfg.lagThresholdTps || 15) + " · 每 15 秒自动刷新 · 本次运行已采样 " + (d.samples || 0) + " 条";
+    + (cfg.lagThresholdTps || 15) + " · " + refreshText + " · 本次运行已采样 " + (d.samples || 0) + " 条";
 
   const tiles = $("#monTiles");
   tiles.textContent = "";
@@ -1770,6 +1773,9 @@ async function applyLoginMethods(){
   $("#sepBox").hidden = !(info.password && info.oauth);
   if (info.oauthLabel) $("#oauthLabel").textContent = info.oauthLabel;
   avatarSources = Array.isArray(info.avatars) ? info.avatars : [];
+  if (typeof info.monitorRefreshSeconds === "number" && info.monitorRefreshSeconds >= 0){
+    monRefreshMs = info.monitorRefreshSeconds * 1000;
+  }
 }
 
 /**
