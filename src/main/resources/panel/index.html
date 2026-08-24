@@ -849,6 +849,7 @@ document.addEventListener("keydown", e => {
 
 /* ---------------------------- 登录 ---------------------------- */
 function showLogin(msg){
+  stopMonAutoRefresh();
   $("#app").classList.remove("on");
   $("#login").style.display = "grid";
   $("#loginMsg").textContent = msg || "";
@@ -886,6 +887,7 @@ $("#loginForm").addEventListener("submit", async e => {
 });
 
 $("#logoutBtn").addEventListener("click", async () => {
+  stopMonAutoRefresh();
   try{ await api("/logout", "POST"); }catch(_){}
   store.token = null;
   showLogin("已退出登录");
@@ -900,7 +902,8 @@ $$(".tab").forEach(tab => tab.addEventListener("click", () => {
   if (view === "config" && !cfgCache) loadConfig();
   if (view === "players") loadPlayers();
   if (view === "economy") loadEconomy();
-  if (view === "monitor") loadMonitor();
+  if (view === "monitor"){ loadMonitor(); startMonAutoRefresh(); }
+  else stopMonAutoRefresh();
 }));
 
 /* ---------------------------- 概览 ---------------------------- */
@@ -1575,6 +1578,21 @@ async function loadEconomy(){
 $("#refreshEco").addEventListener("click", loadEconomy);
 
 /* ---------------------------- 性能监控 ---------------------------- */
+/** 监控页自动刷新间隔（毫秒）。仅在该页可见时轮询，切走 / 退出登录即停。 */
+const MON_REFRESH_MS = 15000;
+let monTimer = null;
+/** 监控页加载失败是否已经提示过（自动刷新期间不重复弹错误，恢复后重置）。 */
+let monErrorShown = false;
+function stopMonAutoRefresh(){
+  if (monTimer){ clearInterval(monTimer); monTimer = null; }
+}
+function startMonAutoRefresh(){
+  if (monTimer) return;
+  monTimer = setInterval(() => {
+    // 浏览器标签页在后台时不刷；视图切走后定时器本身也会被停掉
+    if (!document.hidden && $("#v-monitor").classList.contains("on")) loadMonitor();
+  }, MON_REFRESH_MS);
+}
 function monTime(ts){
   if (!ts || ts <= 0) return "-";
   const d = new Date(ts), p = n => String(n).padStart(2, "0");
@@ -1652,13 +1670,18 @@ function drawMonChart(canvas, samples, threshold){
 async function loadMonitor(){
   let d;
   try{ d = await api("/monitor"); }
-  catch(err){ $("#monLine").textContent = err.message; toast(err.message, true); return; }
+  catch(err){
+    $("#monLine").textContent = err.message;
+    if (!monErrorShown){ toast(err.message, true); monErrorShown = true; }
+    return;
+  }
+  monErrorShown = false;
 
   const tps = d.tps || {}, mem = d.memory || {}, cfg = d.config || {};
   const counters = d.counters || {};
   const totalEvents = Object.values(counters).reduce((a, b) => a + b, 0);
   $("#monLine").textContent = "采样间隔 " + (cfg.sampleIntervalSeconds || 10) + " 秒 · 卡顿阈值 TPS "
-    + (cfg.lagThresholdTps || 15) + " · 本次运行已采样 " + (d.samples || 0) + " 条";
+    + (cfg.lagThresholdTps || 15) + " · 每 15 秒自动刷新 · 本次运行已采样 " + (d.samples || 0) + " 条";
 
   const tiles = $("#monTiles");
   tiles.textContent = "";
