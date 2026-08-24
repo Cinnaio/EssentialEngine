@@ -3,6 +3,8 @@ package com.github.cinnaio.essentialengine.module.webapi;
 import com.github.cinnaio.essentialengine.EssentialEngine;
 import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.module.husktowns.HuskTownsModule;
+import com.github.cinnaio.essentialengine.module.monitor.MonitorEndpoint;
+import com.github.cinnaio.essentialengine.module.monitor.MonitorModule;
 import com.github.cinnaio.essentialengine.module.webapi.endpoint.EssentialsEndpoint;
 import com.github.cinnaio.essentialengine.module.webapi.endpoint.ServerEndpoint;
 import com.github.cinnaio.essentialengine.module.webapi.endpoint.TownEndpoint;
@@ -50,6 +52,13 @@ public class WebApiModule extends EngineModule {
         if (plugin.modules().get("husktowns") instanceof HuskTownsModule module && module.isEnabled()) {
             new TownEndpoint(plugin, module.getService()).register(router);
             plugin.getLogger().info("[WebAPI] 已挂载 HuskTowns 城镇接口");
+        }
+
+        // monitor 在 registerModules 中先于 webapi 注册，因此这里能确认它已经启用
+        if (plugin.modules().get("monitor") instanceof MonitorModule monitor
+                && monitor.isEnabled() && monitor.service() != null) {
+            new MonitorEndpoint(plugin, monitor.service()).register(router);
+            plugin.getLogger().info("[WebAPI] 已挂载性能监控接口（AstrBot 预留）");
         }
 
         HttpLogging.quietClientDisconnects(() -> plugin.getConfig().getBoolean("debug", false));

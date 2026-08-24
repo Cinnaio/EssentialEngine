@@ -83,13 +83,40 @@ public class SqliteStorage extends SqlStorage {
     }
 
     @Override
+    protected String createMonitorEventsTableSql() {
+        return "CREATE TABLE IF NOT EXISTS " + monitorEventsTable() + " ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "ts INTEGER NOT NULL,"
+                + "type TEXT NOT NULL,"
+                + "message TEXT NOT NULL DEFAULT '',"
+                + "data TEXT NOT NULL DEFAULT '{}'"
+                + ")";
+    }
+
+    @Override
+    protected String createMonitorSamplesTableSql() {
+        return "CREATE TABLE IF NOT EXISTS " + monitorSamplesTable() + " ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "ts INTEGER NOT NULL,"
+                + "tps REAL NOT NULL DEFAULT 0,"
+                + "used_mb INTEGER NOT NULL DEFAULT 0,"
+                + "max_mb INTEGER NOT NULL DEFAULT 0,"
+                + "online INTEGER NOT NULL DEFAULT 0"
+                + ")";
+    }
+
+    @Override
     protected String[] extraIndexSql() {
         // 流水的两种查询模式：按时间倒序翻页、按玩家过滤
         return new String[]{
                 "CREATE INDEX IF NOT EXISTS idx_" + transactionsTable() + "_ts ON "
                         + transactionsTable() + " (ts)",
                 "CREATE INDEX IF NOT EXISTS idx_" + transactionsTable() + "_uuid ON "
-                        + transactionsTable() + " (uuid)"
+                        + transactionsTable() + " (uuid)",
+                "CREATE INDEX IF NOT EXISTS idx_" + monitorEventsTable() + "_ts ON "
+                        + monitorEventsTable() + " (ts)",
+                "CREATE INDEX IF NOT EXISTS idx_" + monitorSamplesTable() + "_ts ON "
+                        + monitorSamplesTable() + " (ts)"
         };
     }
 

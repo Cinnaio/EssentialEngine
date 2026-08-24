@@ -54,6 +54,7 @@ core:
   module-name-papi: "PlaceholderAPI 变量"
   module-name-webapi: "REST API"
   module-name-panel: "网页管理面板"
+  module-name-monitor: "性能监控"
   info-header: "<aqua>EssentialEngine <gray>v{version}"
   info-storage: "<dark_gray> - <gray>存储后端: <white>{value}"
   info-server: "<dark_gray> - <gray>服务端: <white>{value}"
@@ -304,6 +305,25 @@ papi:
   kit-once: "仅限一次"
   unlimited: "无限"
 
+monitor:
+  header: "<aqua>性能监控"
+  tps: "<dark_gray> - <gray>TPS: <white>{now} <gray>(1m {tps1m} / 5m {tps5m} / 15m {tps15m})"
+  memory: "<dark_gray> - <gray>内存: <white>{used}MB <gray>/ <white>{max}MB <gray>({percent}%)"
+  online: "<dark_gray> - <gray>在线: <white>{online}"
+  uptime: "<dark_gray> - <gray>已运行: <white>{uptime}"
+  totals: "<dark_gray> - <gray>本次运行: <white>{samples} <gray>次采样，<white>{events} <gray>条事件"
+  events-header: "<aqua>最近事件 <dark_gray>({count})"
+  events-entry: "<dark_gray> - <gray>{time} <white>[{type}] <gray>{message}"
+  samples-header: "<aqua>性能采样 <dark_gray>(最近 {minutes} 分钟，{count} 条)"
+  samples-entry: "<dark_gray> - <gray>{time} <white>TPS {tps} <gray>| 内存 {used}MB <gray>| 在线 {online}"
+  sessions-header: "<aqua>会话记录 <dark_gray>({count})"
+  sessions-entry: "<dark_gray> - <gray>{start} <white>→ <gray>{stop} <dark_gray>({duration}{abnormal})"
+  sessions-running: "（进行中）"
+  sessions-abnormal: "，异常退出"
+  no-data: "<gray>暂无记录。"
+  recorded: "<green>已记录自定义事件 <white>{type}<green>。"
+  custom-disabled: "<red>自定义事件写入未开启（modules.monitor.allow-custom-events）。"
+
 # 命令用法（wrong-args 时展示，参数名跟随玩家语言）
 usage:
   essentialengine: "/ee <reload|info|modules|save>"
@@ -379,3 +399,4 @@ usage:
   kit-delete: "/kit delete <名称>"
   eetown: "/eetown <list|info> [名称]"
   eetown-info: "/eetown info <名称>"
+  eemonitor: "/eemonitor <status|events|samples|sessions|record>"

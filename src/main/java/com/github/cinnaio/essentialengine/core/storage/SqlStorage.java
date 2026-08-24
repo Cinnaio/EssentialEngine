@@ -72,6 +72,12 @@ public abstract class SqlStorage implements StorageProvider {
     /** 流水表建表语句。两种方言的自增主键写法不同，交给子类。 */
     protected abstract String createTransactionsTableSql();
 
+    /** 监控事件表建表语句。 */
+    protected abstract String createMonitorEventsTableSql();
+
+    /** 性能采样表建表语句。 */
+    protected abstract String createMonitorSamplesTableSql();
+
     /**
      * 建表之后要额外执行的索引语句。
      *
@@ -89,6 +95,8 @@ public abstract class SqlStorage implements StorageProvider {
             statement.executeUpdate(createUsersTableSql());
             statement.executeUpdate(createGlobalsTableSql());
             statement.executeUpdate(createTransactionsTableSql());
+            statement.executeUpdate(createMonitorEventsTableSql());
+            statement.executeUpdate(createMonitorSamplesTableSql());
             for (String sql : extraIndexSql()) {
                 statement.executeUpdate(sql);
             }
@@ -391,6 +399,136 @@ public abstract class SqlStorage implements StorageProvider {
             double total = rs.getDouble("total");
             return new EconomySummary(accounts, total,
                     accounts == 0 ? 0 : total / accounts, rs.getDouble("richest"));
+        }
+    }
+
+    // ------------------------------------------------------------------ 监控数据
+
+    protected String monitorEventsTable() {
+        return prefix + "monitor_events";
+    }
+
+    protected String monitorSamplesTable() {
+        return prefix + "monitor_samples";
+    }
+
+    @Override
+    public synchronized void appendMonitorEvents(List<MonitorEvent> records) throws Exception {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        String sql = "INSERT INTO " + monitorEventsTable() + " (ts, type, message, data)"
+                + " VALUES (?, ?, ?, ?)";
+        Connection conn = connection();
+        boolean autoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try (PreparedStatement statement = conn.prepareStatement(sql)) {
+            for (MonitorEvent record : records) {
+                statement.setLong(1, record.timestamp());
+                statement.setString(2, record.type());
+                statement.setString(3, record.message() == null ? "" : record.message());
+                statement.setString(4, record.data() == null ? "{}" : GSON.toJson(record.data()));
+                statement.addBatch();
+            }
+            statement.executeBatch();
+            conn.commit();
+        } catch (Exception error) {
+            conn.rollback();
+            throw error;
+        } finally {
+            conn.setAutoCommit(autoCommit);
+        }
+    }
+
+    @Override
+    public synchronized void appendMonitorSamples(List<PerfSample> records) throws Exception {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        String sql = "INSERT INTO " + monitorSamplesTable()
+                + " (ts, tps, used_mb, max_mb, online) VALUES (?, ?, ?, ?, ?)";
+        Connection conn = connection();
+        boolean autoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try (PreparedStatement statement = conn.prepareStatement(sql)) {
+            for (PerfSample record : records) {
+                statement.setLong(1, record.timestamp());
+                statement.setDouble(2, record.tps());
+                statement.setLong(3, record.usedMB());
+                statement.setLong(4, record.maxMB());
+                statement.setInt(5, record.online());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+            conn.commit();
+        } catch (Exception error) {
+            conn.rollback();
+            throw error;
+        } finally {
+            conn.setAutoCommit(autoCommit);
+        }
+    }
+
+    @Override
+    public synchronized List<MonitorEvent> recentMonitorEvents(int limit, String type, long since)
+            throws Exception {
+        List<MonitorEvent> result = new ArrayList<>();
+        String sql = "SELECT ts, type, message, data FROM " + monitorEventsTable()
+                + " WHERE ts >= ?" + (type == null || type.isEmpty() ? "" : " AND type = ?")
+                + " ORDER BY ts DESC LIMIT ?";
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            int index = 1;
+            statement.setLong(index++, since);
+            if (type != null && !type.isEmpty()) {
+                statement.setString(index++, type);
+            }
+            statement.setInt(index, Math.max(1, limit));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    String raw = rs.getString("data");
+                    Map<String, Object> data = raw == null || raw.isEmpty()
+                            ? null : GSON.fromJson(raw, MAP_TYPE);
+                    result.add(new MonitorEvent(rs.getLong("ts"), rs.getString("type"),
+                            rs.getString("message"), data));
+                }
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized List<PerfSample> recentMonitorSamples(long since, int limit) throws Exception {
+        List<PerfSample> result = new ArrayList<>();
+        String sql = "SELECT ts, tps, used_mb, max_mb, online FROM " + monitorSamplesTable()
+                + " WHERE ts >= ? ORDER BY ts ASC LIMIT ?";
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            statement.setLong(1, since);
+            statement.setInt(2, Math.max(1, limit));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new PerfSample(rs.getLong("ts"), rs.getDouble("tps"),
+                            rs.getLong("used_mb"), rs.getLong("max_mb"), rs.getInt("online")));
+                }
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized int pruneMonitorEvents(long before) throws Exception {
+        String sql = "DELETE FROM " + monitorEventsTable() + " WHERE ts < ?";
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            statement.setLong(1, before);
+            return statement.executeUpdate();
+        }
+    }
+
+    @Override
+    public synchronized int pruneMonitorSamples(long before) throws Exception {
+        String sql = "DELETE FROM " + monitorSamplesTable() + " WHERE ts < ?";
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            statement.setLong(1, before);
+            return statement.executeUpdate();
         }
     }
 }

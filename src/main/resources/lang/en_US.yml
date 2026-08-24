@@ -55,6 +55,7 @@ core:
   module-name-papi: "PlaceholderAPI"
   module-name-webapi: "REST API"
   module-name-panel: "Web Panel"
+  module-name-monitor: "Performance Monitor"
   info-header: "<aqua>EssentialEngine <gray>v{version}"
   info-storage: "<dark_gray> - <gray>Storage: <white>{value}"
   info-server: "<dark_gray> - <gray>Server: <white>{value}"
@@ -305,6 +306,25 @@ papi:
   kit-once: "One-time"
   unlimited: "Unlimited"
 
+monitor:
+  header: "<aqua>Performance Monitor"
+  tps: "<dark_gray> - <gray>TPS: <white>{now} <gray>(1m {tps1m} / 5m {tps5m} / 15m {tps15m})"
+  memory: "<dark_gray> - <gray>Memory: <white>{used}MB <gray>/ <white>{max}MB <gray>({percent}%)"
+  online: "<dark_gray> - <gray>Online: <white>{online}"
+  uptime: "<dark_gray> - <gray>Uptime: <white>{uptime}"
+  totals: "<dark_gray> - <gray>This session: <white>{samples} <gray>samples, <white>{events} <gray>events"
+  events-header: "<aqua>Recent events <dark_gray>({count})"
+  events-entry: "<dark_gray> - <gray>{time} <white>[{type}] <gray>{message}"
+  samples-header: "<aqua>Samples <dark_gray>(last {minutes} min, {count})"
+  samples-entry: "<dark_gray> - <gray>{time} <white>TPS {tps} <gray>| Mem {used}MB <gray>| Online {online}"
+  sessions-header: "<aqua>Sessions <dark_gray>({count})"
+  sessions-entry: "<dark_gray> - <gray>{start} <white>→ <gray>{stop} <dark_gray>({duration}{abnormal})"
+  sessions-running: " (running)"
+  sessions-abnormal: ", abnormal exit"
+  no-data: "<gray>No records yet."
+  recorded: "<green>Custom event <white>{type} <green>recorded."
+  custom-disabled: "<red>Custom event recording is disabled (modules.monitor.allow-custom-events)."
+
 # Command usage lines (shown on wrong arguments, localized per player)
 usage:
   essentialengine: "/ee <reload|info|modules|save>"
@@ -380,3 +400,4 @@ usage:
   kit-delete: "/kit delete <name>"
   eetown: "/eetown <list|info> [name]"
   eetown-info: "/eetown info <name>"
+  eemonitor: "/eemonitor <status|events|samples|sessions|record>"

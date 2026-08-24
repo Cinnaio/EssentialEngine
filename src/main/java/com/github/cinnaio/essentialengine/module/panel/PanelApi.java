@@ -11,6 +11,8 @@ import com.github.cinnaio.essentialengine.core.storage.UserSummary;
 import com.github.cinnaio.essentialengine.core.user.UserData;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
 import com.github.cinnaio.essentialengine.module.economy.EconomyModule;
+import com.github.cinnaio.essentialengine.module.monitor.MonitorModule;
+import com.github.cinnaio.essentialengine.module.monitor.MonitorService;
 import com.github.cinnaio.essentialengine.module.webapi.http.ApiResponse;
 import com.github.cinnaio.essentialengine.module.webapi.http.Router;
 import com.google.gson.JsonElement;
@@ -161,6 +163,14 @@ public class PanelApi {
             }
         });
 
+        router.get("/api/monitor", (session, params) -> {
+            try {
+                return ApiResponse.ok(MODULE, monitor());
+            } catch (Exception error) {
+                return ApiResponse.error(MODULE, error.getMessage());
+            }
+        });
+
         router.get("/api/config", (session, params) -> ApiResponse.ok(MODULE, config.read()));
 
         router.post("/api/config", (session, params) -> {
@@ -244,6 +254,30 @@ public class PanelApi {
             modules.add(item);
         }
         data.put("modules", modules);
+        return data;
+    }
+
+    // ------------------------------------------------------------------ 性能监控
+
+    /**
+     * 监控页数据：当前状态 + 最近采样（画曲线）+ 最近事件 + 会话记录。
+     *
+     * <p>存储查询不碰 Bukkit API，直接在 HTTP 线程上跑；先刷一次队列，
+     * 让面板看到的是已经落盘的最新数据。</p>
+     */
+    private Map<String, Object> monitor() throws Exception {
+        MonitorModule module = plugin.modules() != null && plugin.modules().isActive("monitor")
+                ? (MonitorModule) plugin.modules().get("monitor") : null;
+        if (module == null || module.service() == null || !module.service().isRunning()) {
+            throw new IllegalStateException("性能监控模块未启用（config.yml 的 modules.monitor.enabled）");
+        }
+        MonitorService service = module.service();
+        service.flush();
+
+        Map<String, Object> data = service.status();
+        data.put("sampleHistory", service.samples(120, 240));
+        data.put("events", service.events(60, null, 0));
+        data.put("sessions", service.sessions(10));
         return data;
     }
 

@@ -149,6 +149,9 @@ permissions:
     default: op
   essentialengine.command.town:
     default: true
+  essentialengine.command.eemonitor:
+    description: 查看性能监控与事件记录
+    default: op
   essentialengine.socialspy:
     description: 监听他人私聊
     default: op

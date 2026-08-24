@@ -336,3 +336,39 @@ modules:
     # 服务端到服务端的调用（机器人、监控）不受影响，因为 CORS 只约束浏览器。
     # 需要网页前端直连时填具体来源，例如 "https://panel.example.com"；不建议填 "*"
     cors-origin: ""
+
+  # ---------------- 性能监控 ----------------
+  # 定时采样 TPS / 内存 / 在线人数，自动记录性能事件（严重卡顿、TPS 恢复、
+  # 内存占用过高、启动 / 关闭 / 重载、异常退出），数据跟随 storage.type 持久化。
+  # 查看方式：
+  #   · 游戏内 / 控制台 /eemonitor
+  #   · 网页管理面板的「监控」页（需开启 panel 模块）
+  #   · REST 接口 /api/monitor/*（需同时开启 webapi 模块，为 AstrBot 等外部程序预留）
+  monitor:
+    enabled: true
+    # 性能采样间隔（秒）。采样在异步线程完成，不打扰主线程
+    sample-interval-seconds: 10
+    # 采样与事件攒多少秒批量落盘一次（先入内存队列，绝不阻塞游戏）
+    flush-seconds: 15
+    # 采样与事件保留天数，超期的每小时清理一次
+    retention-days: 7
+    # 内存里保留最近多少条采样，供快速查询（历史数据在存储里）
+    memory-samples: 8640
+    # ---- 自动记录的性能事件 ----
+    # 是否记录严重卡顿事件（TPS 低于阈值）与 TPS 恢复事件
+    record-lag: true
+    # 卡顿判定阈值：TPS 低于该值记为一次卡顿事件
+    lag-threshold-tps: 15.0
+    # 同一时段卡顿事件的去重间隔（秒），避免 TPS 在阈值附近抖动时刷屏
+    lag-cooldown-seconds: 60
+    # 是否记录内存占用过高告警事件
+    record-memory: true
+    # 内存告警阈值：已用内存占比超过该百分比时告警
+    memory-warning-percent: 90
+    # 同一时段内存告警的去重间隔（分钟）
+    memory-cooldown-minutes: 5
+    # 是否记录服务器启动 / 关闭 / 重载事件。
+    # 崩溃、强杀等异常退出无法在当次记录，会在下次启动时自动补记 abnormal_shutdown
+    record-start-stop: true
+    # 是否允许外部程序（如 AstrBot）通过 POST /api/monitor/events 写入自定义事件
+    allow-custom-events: true

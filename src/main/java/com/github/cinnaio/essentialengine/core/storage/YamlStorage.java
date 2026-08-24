@@ -384,6 +384,151 @@ public class YamlStorage implements StorageProvider {
         return new EconomySummary(accounts, total, accounts == 0 ? 0 : total / accounts, richest);
     }
 
+    // ------------------------------------------------------------------ 监控数据
+    //
+    // 性能采样与监控事件同样只追加、按时间倒序读，写成 JSONL 文件。
+
+    private File monitorEventsFile() {
+        return new File(dataFolder, "monitor_events.jsonl");
+    }
+
+    private File monitorSamplesFile() {
+        return new File(dataFolder, "monitor_samples.jsonl");
+    }
+
+    @Override
+    public synchronized void appendMonitorEvents(List<MonitorEvent> records) throws Exception {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        StringBuilder buffer = new StringBuilder(records.size() * 160);
+        for (MonitorEvent record : records) {
+            buffer.append(TX_GSON.toJson(record)).append('\n');
+        }
+        Files.writeString(monitorEventsFile().toPath(), buffer,
+                StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    }
+
+    @Override
+    public synchronized void appendMonitorSamples(List<PerfSample> records) throws Exception {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        StringBuilder buffer = new StringBuilder(records.size() * 96);
+        for (PerfSample record : records) {
+            buffer.append(TX_GSON.toJson(record)).append('\n');
+        }
+        Files.writeString(monitorSamplesFile().toPath(), buffer,
+                StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    }
+
+    @Override
+    public synchronized List<MonitorEvent> recentMonitorEvents(int limit, String type, long since) {
+        File file = monitorEventsFile();
+        if (!file.exists()) {
+            return List.of();
+        }
+        List<MonitorEvent> all = new ArrayList<>();
+        try (var lines = Files.lines(file.toPath(), StandardCharsets.UTF_8)) {
+            lines.forEach(line -> {
+                if (line.isBlank()) {
+                    return;
+                }
+                try {
+                    MonitorEvent event = TX_GSON.fromJson(line, MonitorEvent.class);
+                    if (event != null && event.timestamp() >= since
+                            && (type == null || type.isEmpty() || type.equals(event.type()))) {
+                        all.add(event);
+                    }
+                } catch (Exception ignored) {
+                    // 跳过写坏的行，不因为一行损坏就丢掉整份记录
+                }
+            });
+        } catch (Exception error) {
+            plugin.getLogger().warning("读取监控事件失败: " + error.getMessage());
+        }
+        List<MonitorEvent> result = new ArrayList<>(Math.min(Math.max(1, limit), all.size()));
+        for (int i = all.size() - 1; i >= 0 && result.size() < Math.max(1, limit); i--) {
+            result.add(all.get(i));
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized List<PerfSample> recentMonitorSamples(long since, int limit) {
+        File file = monitorSamplesFile();
+        if (!file.exists()) {
+            return List.of();
+        }
+        List<PerfSample> result = new ArrayList<>();
+        try (var lines = Files.lines(file.toPath(), StandardCharsets.UTF_8)) {
+            lines.forEach(line -> {
+                if (line.isBlank() || result.size() >= Math.max(1, limit)) {
+                    return;
+                }
+                try {
+                    PerfSample sample = TX_GSON.fromJson(line, PerfSample.class);
+                    if (sample != null && sample.timestamp() >= since) {
+                        result.add(sample);
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+        } catch (Exception error) {
+            plugin.getLogger().warning("读取性能采样失败: " + error.getMessage());
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized int pruneMonitorEvents(long before) throws Exception {
+        return pruneJsonl(monitorEventsFile(), before);
+    }
+
+    @Override
+    public synchronized int pruneMonitorSamples(long before) throws Exception {
+        return pruneJsonl(monitorSamplesFile(), before);
+    }
+
+    /** 重写 JSONL，只保留 before 之后的记录，返回删除条数。 */
+    private int pruneJsonl(File file, long before) throws Exception {
+        if (!file.exists()) {
+            return 0;
+        }
+        List<String> keep = new ArrayList<>();
+        int total = 0;
+        try (var stream = Files.lines(file.toPath(), StandardCharsets.UTF_8)) {
+            var iterator = stream.iterator();
+            while (iterator.hasNext()) {
+                String line = iterator.next();
+                if (line.isBlank()) {
+                    continue;
+                }
+                total++;
+                try {
+                    var json = com.google.gson.JsonParser.parseString(line).getAsJsonObject();
+                    long ts = json.has("timestamp") ? json.get("timestamp").getAsLong() : 0;
+                    if (ts >= before) {
+                        keep.add(line);
+                    }
+                } catch (Exception ignored) {
+                    // 无法解析的行直接保留，不因一行损坏丢数据
+                    keep.add(line);
+                }
+            }
+        }
+        if (keep.size() == total) {
+            return 0;
+        }
+        StringBuilder buffer = new StringBuilder(keep.size() * 128);
+        for (String line : keep) {
+            buffer.append(line).append('\n');
+        }
+        Files.writeString(file.toPath(), buffer, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        return total - keep.size();
+    }
+
     /** 把配置节点递归转换成普通 Map，保持和 JSON 后端一致的结构。 */
     private Map<String, Object> sectionToMap(ConfigurationSection section) {
         Map<String, Object> map = new LinkedHashMap<>();

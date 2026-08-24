@@ -23,7 +23,8 @@
 | HuskTowns 对接 | `husktowns` | `/eetown`（未安装 HuskTowns 时自动跳过） |
 | PlaceholderAPI 变量 | `papi` | 无命令，提供 `%ee_...%` 变量（未安装 PlaceholderAPI 时自动跳过） |
 | REST API | `webapi` | 无命令，提供 HTTP 接口（默认关闭） |
-| 网页管理面板 | `panel` | 无命令，浏览器里改配置 / 管玩家 / 查流水（默认关闭） |
+| 网页管理面板 | `panel` | 无命令，浏览器里改配置 / 管玩家 / 查流水 / 看监控曲线（默认关闭） |
+| 性能监控 | `monitor` | `/eemonitor`，定时采样 TPS / 内存，自动记录性能事件与重启关闭事件，为 AstrBot 预留 REST 接口 |
 | 核心 | `core` | `/ee reload\|info\|modules\|save` |
 
 关闭某个模块后，它的命令会真正从服务端命令表里移除，不会和其它插件抢命令名。
@@ -236,6 +237,90 @@ modules:
 
 ---
 
+## 性能监控与 AstrBot 预留接口
+
+`modules.monitor` 默认开启：定时采样 **TPS / 内存 / 在线人数**，并自动记录
+**性能相关事件**与**服务器启停事件**，数据跟随 `storage.type` 持久化
+（YAML 后端写成 `data/monitor_events.jsonl` / `monitor_samples.jsonl`，
+SQLite / MySQL 建 `ee_monitor_events` / `ee_monitor_samples` 表）。
+
+### 自动记录什么
+
+| 事件类型 | 触发条件 |
+| --- | --- |
+| `lag` | TPS 跌破阈值（默认 15），去重间隔 60 秒 |
+| `lag_recovered` | TPS 恢复到「阈值 + 2」以上 |
+| `memory_high` | 已用内存占比超过阈值（默认 90%），去重间隔 5 分钟 |
+| `server_start` | 插件随服务器启动 |
+| `server_stop` | 服务器正常关闭 |
+| `reload` | `/ee reload` 或插件被重载 |
+| `abnormal_shutdown` | **下次启动时补记**：上次会话没走完关服流程（崩溃 / 强杀） |
+
+采样与事件都先入内存队列、由定时任务批量异步落盘，**不会阻塞主线程**——
+即使主线程已经卡死，采样器依然能记录下当时的 TPS，这正是排查卡顿需要的数据。
+
+### 配置
+
+```yaml
+modules:
+  monitor:
+    sample-interval-seconds: 10     # 采样间隔
+    flush-seconds: 15               # 攒多久批量落盘一次
+    retention-days: 7               # 数据保留天数，超期每小时清理
+    record-lag: true
+    lag-threshold-tps: 15.0
+    lag-cooldown-seconds: 60
+    record-memory: true
+    memory-warning-percent: 90
+    memory-cooldown-minutes: 5
+    record-start-stop: true         # 启动 / 关闭 / 重载事件
+    allow-custom-events: true       # 是否允许外部程序写入自定义事件
+```
+
+### 查看方式
+
+- **游戏内 / 控制台**：`/eemonitor [status|events|samples|sessions|record]`，
+  权限 `essentialengine.command.eemonitor`（默认 OP）。
+  `/eemonitor record <类型> <内容>` 可以手动记录一条自定义事件。
+- **网页管理面板**：开启 `panel` 模块后，「监控」页有 TPS / 内存曲线、
+  最近事件与会话记录（异常退出会标红）。
+- **REST 接口**（为 AstrBot 等外部程序预留，见下）。
+
+### AstrBot 预留接口
+
+同时开启 `modules.monitor` 与 `modules.webapi` 后，webapi 会挂载
+`/api/monitor/*` 接口，鉴权与其它接口一致（`Authorization: Bearer <api-key>`），
+接口契约如下，AstrBot 插件按此对接即可：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/monitor/status` | 当前 TPS / 内存 / 在线 / 运行时长 / 本次运行事件计数 / 会话状态 |
+| GET | `/api/monitor/samples?minutes=30&limit=500` | 性能采样历史（正序，超出自动抽稀），含 `tps` `usedMB` `maxMB` `online` |
+| GET | `/api/monitor/events?limit=50&type=lag&since=<毫秒时间戳>` | 最近事件（倒序），可按类型过滤、按时间起点过滤 |
+| GET | `/api/monitor/sessions?limit=20` | 启动 / 关闭配对记录，`abnormal` 标记异常退出，`running` 标记进行中 |
+| POST | `/api/monitor/events` | 写入自定义事件（需 `allow-custom-events`），请求体 `{"type":"...","message":"...","data":{...}}` |
+
+典型用法示例（Python）：
+
+```python
+import requests
+
+BASE = "http://127.0.0.1:8192"
+HEADERS = {"Authorization": "Bearer <api-key>"}
+
+status = requests.get(f"{BASE}/api/monitor/status", headers=HEADERS).json()["data"]
+print(status["tps"], status["memory"]["usedMB"])
+
+# 让 AstrBot 把「检测到刷屏」这类外部事件也记进同一份事件日志
+requests.post(f"{BASE}/api/monitor/events", headers=HEADERS,
+              json={"type": "spam_detected", "message": "玩家 Alice 连续发送 20 条消息"})
+```
+
+> 事件类型字段、`data` 里的结构化字段都是稳定契约；Java 侧也预留了
+> `MonitorService.recordEvent(type, message, data)`，其它模块可直接调用。
+
+---
+
 ## 网页管理面板
 
 在浏览器里查看服务器状态、直接编辑 `config.yml`、管理在线与离线玩家。
@@ -266,6 +351,7 @@ modules:
 | 配置 | 按分组编辑 config.yml，**YAML 里的注释会作为说明显示出来**，支持搜索 |
 | 玩家 | 在线列表 + **按名字搜索离线玩家**；点任一条目展开详情抽屉 |
 | 经济 | 全服流通总量、人均余额、资金来源占比与最近流水 |
+| 监控 | TPS / 内存双曲线图、最近性能事件、启动关闭会话记录（需开启 monitor 模块） |
 
 玩家详情抽屉里能看到档案（余额、首次加入、最后在线、游戏时长、家的数量、UUID）、
 封禁与禁言的理由 / 操作者 / 到期时间、在线时的世界与延迟，以及**这名玩家自己的经济流水**。

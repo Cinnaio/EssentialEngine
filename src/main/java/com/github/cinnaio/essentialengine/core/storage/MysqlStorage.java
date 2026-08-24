@@ -98,6 +98,31 @@ public class MysqlStorage extends SqlStorage {
     }
 
     @Override
+    protected String createMonitorEventsTableSql() {
+        return "CREATE TABLE IF NOT EXISTS " + monitorEventsTable() + " ("
+                + "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
+                + "ts BIGINT NOT NULL,"
+                + "type VARCHAR(32) NOT NULL,"
+                + "message VARCHAR(255) NOT NULL DEFAULT '',"
+                + "data MEDIUMTEXT NOT NULL,"
+                + "INDEX idx_mon_events_ts (ts)"
+                + ") DEFAULT CHARSET=utf8mb4";
+    }
+
+    @Override
+    protected String createMonitorSamplesTableSql() {
+        return "CREATE TABLE IF NOT EXISTS " + monitorSamplesTable() + " ("
+                + "id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
+                + "ts BIGINT NOT NULL,"
+                + "tps DOUBLE NOT NULL DEFAULT 0,"
+                + "used_mb BIGINT NOT NULL DEFAULT 0,"
+                + "max_mb BIGINT NOT NULL DEFAULT 0,"
+                + "online INT NOT NULL DEFAULT 0,"
+                + "INDEX idx_mon_samples_ts (ts)"
+                + ") DEFAULT CHARSET=utf8mb4";
+    }
+
+    @Override
     protected String upsertUserSql() {
         return "INSERT INTO " + usersTable() + " (uuid, name, balance, data) VALUES (?, ?, ?, ?) "
                 + "ON DUPLICATE KEY UPDATE name = VALUES(name), balance = VALUES(balance), data = VALUES(data)";

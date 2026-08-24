@@ -82,4 +82,37 @@ public interface StorageProvider {
     default EconomySummary economySummary() throws Exception {
         return EconomySummary.EMPTY;
     }
+
+    // ------------------------------------------------------------------ 监控数据
+    //
+    // 性能采样与监控事件（卡顿、启动/关闭、异常退出……）。默认实现全部是空操作，
+    // 新后端不实现也能跑（只是没有监控历史）；内置的三个后端都做了真正的实现。
+
+    /** 批量追加监控事件。调用方会攒一批再写，不要在每笔事件时单独调用。 */
+    default void appendMonitorEvents(List<MonitorEvent> records) throws Exception {
+    }
+
+    /** 批量追加性能采样。 */
+    default void appendMonitorSamples(List<PerfSample> records) throws Exception {
+    }
+
+    /** 最近的事件，按时间倒序。{@code type} 为空表示不限类型；{@code since} 为 0 表示不限起点。 */
+    default List<MonitorEvent> recentMonitorEvents(int limit, String type, long since) throws Exception {
+        return List.of();
+    }
+
+    /** {@code since} 之后的性能采样，按时间正序，最多 {@code limit} 条。 */
+    default List<PerfSample> recentMonitorSamples(long since, int limit) throws Exception {
+        return List.of();
+    }
+
+    /** 删除 {@code before} 之前的监控事件，返回删除条数。 */
+    default int pruneMonitorEvents(long before) throws Exception {
+        return 0;
+    }
+
+    /** 删除 {@code before} 之前的性能采样，返回删除条数。 */
+    default int pruneMonitorSamples(long before) throws Exception {
+        return 0;
+    }
 }

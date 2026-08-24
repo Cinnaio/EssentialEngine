@@ -18,6 +18,7 @@ import com.github.cinnaio.essentialengine.module.economy.EconomyManager;
 import com.github.cinnaio.essentialengine.module.economy.EconomyModule;
 import com.github.cinnaio.essentialengine.module.economy.VaultHook;
 import com.github.cinnaio.essentialengine.module.husktowns.HuskTownsModule;
+import com.github.cinnaio.essentialengine.module.monitor.MonitorModule;
 import com.github.cinnaio.essentialengine.module.panel.PanelModule;
 import com.github.cinnaio.essentialengine.module.papi.PapiModule;
 import com.github.cinnaio.essentialengine.module.player.PlayerModule;
@@ -172,6 +173,9 @@ public class EssentialEngine extends JavaPlugin {
         modules.register(new EconomyModule(this));
         modules.register(new HuskTownsModule(this));
         modules.register(new PapiModule(this));
+        // monitor 必须在 webapi 之前注册：webapi 的 setup() 需要确认
+        // monitor 已启用才会挂载 /api/monitor/* 接口
+        modules.register(new MonitorModule(this));
         modules.register(new WebApiModule(this));
         modules.register(new PanelModule(this));
     }

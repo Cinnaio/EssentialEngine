@@ -538,6 +538,40 @@ input:-webkit-autofill:focus{
 ::-webkit-scrollbar{ width:10px; height:10px; }
 ::-webkit-scrollbar-thumb{ background:#C9CDD3; border-radius:10px;
   border:3px solid transparent; background-clip:content-box; }
+
+/* ---- 性能监控 ---- */
+.mon-legend{ float:right; font-size:11.5px; font-weight:450; color:var(--text-2); }
+.mon-legend i{ display:inline-block; width:14px; height:3px; border-radius:2px;
+  margin:0 4px 2px 10px; vertical-align:middle; }
+.mon-legend i.lg-tps{ background:var(--good); }
+.mon-legend i.lg-mem{ background:#3B82C4; }
+.mon-legend i.lg-thr{ background:var(--danger); }
+#monChart{ width:100%; height:220px; display:block; }
+.evt{ display:flex; align-items:baseline; gap:10px; padding:10px 2px;
+  box-shadow:inset 0 -1px 0 var(--line); }
+.evt:last-child{ box-shadow:none; }
+.evt .t{ flex:none; width:min(150px,26%); font-size:12px; color:var(--text-3);
+  font-family:var(--font-mono); }
+.evt .type{ flex:none; width:118px; font-size:11px; font-weight:600; color:var(--text-2); }
+.evt .type.lag, .evt .type.abnormal_shutdown{ color:var(--danger); }
+.evt .type.lag_recovered{ color:var(--good); }
+.evt .type.memory_high{ color:var(--warn); }
+.evt .type.server_start, .evt .type.server_stop{ color:var(--text-2); }
+.evt .type.reload{ color:var(--warn); }
+.evt .m{ flex:1; min-width:0; font-size:13px; color:var(--text);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sess{ display:flex; align-items:baseline; gap:10px; padding:10px 2px;
+  box-shadow:inset 0 -1px 0 var(--line); font-size:13px; }
+.sess:last-child{ box-shadow:none; }
+.sess .t{ flex:none; width:min(150px,26%); font-size:12px; color:var(--text-3);
+  font-family:var(--font-mono); }
+.sess .d{ flex:1; min-width:0; color:var(--text-2); overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+.sess .badge{ flex:none; font-size:11px; padding:2px 8px; border-radius:100px; }
+.sess .badge.ab{ color:var(--danger); background:rgba(217,72,59,.08);
+  border:1px solid rgba(217,72,59,.30); }
+.sess .badge.run{ color:var(--good); background:rgba(47,158,68,.08);
+  border:1px solid rgba(47,158,68,.30); }
 </style>
 </head>
 <body>
@@ -579,6 +613,8 @@ input:-webkit-autofill:focus{
         <span class="sq"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg></span>玩家</button>
       <button class="tab" role="tab" data-view="economy" aria-selected="false">
         <span class="sq"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.6"/><circle cx="12" cy="12" r="2.4"/><path d="M6 9.6v4.8M18 9.6v4.8"/></svg></span>经济</button>
+      <button class="tab" role="tab" data-view="monitor" aria-selected="false">
+        <span class="sq"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg></span>监控</button>
     </nav>
     <div style="margin-top:auto; padding-top:16px">
       <button class="btn sm" style="width:100%" id="logoutBtn">退出登录</button>
@@ -655,6 +691,29 @@ input:-webkit-autofill:focus{
       <div class="panel glass">
         <h3>最近流水</h3>
         <div id="txList"></div>
+      </div>
+    </section>
+
+    <!-- 性能监控 -->
+    <section class="view" id="v-monitor">
+      <div class="head">
+        <div><h2>性能监控</h2><p id="monLine">—</p></div>
+        <button class="btn" id="refreshMon">刷新</button>
+      </div>
+      <div class="tiles" id="monTiles"></div>
+      <div class="panel glass">
+        <h3>TPS / 内存曲线
+          <span class="mon-legend"><i class="lg-tps"></i>TPS<i class="lg-mem"></i>内存%<i class="lg-thr"></i>卡顿阈值</span>
+        </h3>
+        <canvas id="monChart"></canvas>
+      </div>
+      <div class="panel glass">
+        <h3>最近事件</h3>
+        <div id="monEvents"></div>
+      </div>
+      <div class="panel glass">
+        <h3>会话记录</h3>
+        <div id="monSessions"></div>
       </div>
     </section>
   </main>
@@ -841,6 +900,7 @@ $$(".tab").forEach(tab => tab.addEventListener("click", () => {
   if (view === "config" && !cfgCache) loadConfig();
   if (view === "players") loadPlayers();
   if (view === "economy") loadEconomy();
+  if (view === "monitor") loadMonitor();
 }));
 
 /* ---------------------------- 概览 ---------------------------- */
@@ -1513,6 +1573,153 @@ async function loadEconomy(){
   });
 }
 $("#refreshEco").addEventListener("click", loadEconomy);
+
+/* ---------------------------- 性能监控 ---------------------------- */
+function monTime(ts){
+  if (!ts || ts <= 0) return "-";
+  const d = new Date(ts), p = n => String(n).padStart(2, "0");
+  return p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function monDur(ms){
+  if (!ms || ms <= 0) return "—";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d > 0) return d + "天" + h + "小时";
+  if (h > 0) return h + "小时" + m + "分";
+  return m + "分钟" + (s % 60) + "秒";
+}
+
+/** 在 canvas 上画 TPS（左轴 0-20，绿）与内存占用百分比（右轴 0-100，蓝）双曲线。 */
+function drawMonChart(canvas, samples, threshold){
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || canvas.parentElement.clientWidth || 600;
+  const h = 220;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  if (!samples || samples.length < 2){
+    ctx.fillStyle = "#9AA0A8";
+    ctx.font = "13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("暂无足够采样数据（开启 modules.monitor 后自动采集）", w / 2, h / 2);
+    return;
+  }
+  const padL = 32, padR = 38, padT = 12, padB = 18;
+  const pw = w - padL - padR, ph = h - padT - padB;
+  const xs = i => padL + (i / (samples.length - 1)) * pw;
+  const yTps = v => padT + ph - Math.max(0, Math.min(20, v)) / 20 * ph;
+  const yMem = p => padT + ph - Math.max(0, Math.min(100, p)) / 100 * ph;
+  const memPct = s => s.maxMB > 0 ? s.usedMB / s.maxMB * 100 : 0;
+
+  ctx.font = "10px monospace";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= 4; i++){
+    const v = i * 5, y = yTps(v);
+    ctx.strokeStyle = "rgba(120,130,145,.14)";
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+    ctx.fillStyle = "#9AA0A8";
+    ctx.textAlign = "right"; ctx.fillText(String(v), padL - 6, y);
+  }
+  ctx.textAlign = "left";
+  [0, 50, 100].forEach(p => ctx.fillText(p + "%", w - padR + 6, yMem(p)));
+
+  const thr = Number(threshold) || 0;
+  if (thr > 0 && thr < 20){
+    ctx.strokeStyle = "rgba(217,72,59,.55)";
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(padL, yTps(thr)); ctx.lineTo(w - padR, yTps(thr)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.lineWidth = 1.7;
+  ctx.strokeStyle = "#3B82C4";
+  ctx.beginPath();
+  samples.forEach((s, i) => { const x = xs(i), y = yMem(memPct(s)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.stroke();
+
+  ctx.strokeStyle = "#2F9E44";
+  ctx.beginPath();
+  samples.forEach((s, i) => {
+    const x = xs(i), y = yTps(s.tps < 0 ? 0 : Math.min(20, s.tps));
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.stroke();
+}
+
+async function loadMonitor(){
+  let d;
+  try{ d = await api("/monitor"); }
+  catch(err){ $("#monLine").textContent = err.message; toast(err.message, true); return; }
+
+  const tps = d.tps || {}, mem = d.memory || {}, cfg = d.config || {};
+  const counters = d.counters || {};
+  const totalEvents = Object.values(counters).reduce((a, b) => a + b, 0);
+  $("#monLine").textContent = "采样间隔 " + (cfg.sampleIntervalSeconds || 10) + " 秒 · 卡顿阈值 TPS "
+    + (cfg.lagThresholdTps || 15) + " · 本次运行已采样 " + (d.samples || 0) + " 条";
+
+  const tiles = $("#monTiles");
+  tiles.textContent = "";
+  const tpsSub = tps["1m"] == null || tps["1m"] < 0 ? ""
+    : "1m " + Number(tps["1m"]).toFixed(1) + " / 5m " + Number(tps["5m"]).toFixed(1)
+      + " / 15m " + Number(tps["15m"]).toFixed(1);
+  tiles.append(
+    tile("TPS", tps.now == null || tps.now < 0 ? "—" : Number(tps.now).toFixed(1), tpsSub),
+    tile("内存", mem.usedMB + " MB",
+      "上限 " + mem.maxMB + " MB · " + Math.round(mem.usedMB / (mem.maxMB || 1) * 100) + "%"),
+    tile("在线人数", String(d.online)),
+    tile("运行时长", monDur(d.uptimeMs)),
+    tile("本次事件", String(totalEvents),
+      "卡顿 " + (counters.lag || 0) + " · 恢复 " + (counters.lag_recovered || 0)
+      + " · 内存告警 " + (counters.memory_high || 0))
+  );
+
+  drawMonChart($("#monChart"), d.sampleHistory || [], cfg.lagThresholdTps);
+
+  const evHost = $("#monEvents");
+  evHost.textContent = "";
+  if (!d.events || !d.events.length){
+    const empty = document.createElement("div"); empty.className = "empty";
+    empty.textContent = "暂无事件记录"; evHost.append(empty);
+  }else{
+    d.events.forEach(ev => {
+      const row = document.createElement("div"); row.className = "evt";
+      const t = document.createElement("span"); t.className = "t"; t.textContent = monTime(ev.timestamp);
+      const type = document.createElement("span"); type.className = "type " + (ev.type || "");
+      type.textContent = ev.type || "?";
+      const m = document.createElement("span"); m.className = "m"; m.textContent = ev.message || "";
+      row.append(t, type, m);
+      evHost.append(row);
+    });
+  }
+
+  const ssHost = $("#monSessions");
+  ssHost.textContent = "";
+  if (!d.sessions || !d.sessions.length){
+    const empty = document.createElement("div"); empty.className = "empty";
+    empty.textContent = "暂无会话记录"; ssHost.append(empty);
+  }else{
+    d.sessions.forEach(s => {
+      const row = document.createElement("div"); row.className = "sess";
+      const t = document.createElement("span"); t.className = "t"; t.textContent = monTime(s.start);
+      const dur = document.createElement("span"); dur.className = "d";
+      dur.textContent = (s.running ? "进行中" : "→ " + monTime(s.stop))
+        + (s.durationMs > 0 ? " · " + monDur(s.durationMs) : "");
+      row.append(t, dur);
+      if (s.running){
+        const b = document.createElement("span"); b.className = "badge run"; b.textContent = "进行中";
+        row.append(b);
+      }else if (s.abnormal){
+        const b = document.createElement("span"); b.className = "badge ab"; b.textContent = "异常退出";
+        row.append(b);
+      }
+      ssHost.append(row);
+    });
+  }
+}
+$("#refreshMon").addEventListener("click", loadMonitor);
 
 /* ---------------------------- OAuth ---------------------------- */
 $("#oauthBtn").addEventListener("click", async () => {
