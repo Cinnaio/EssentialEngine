@@ -23,6 +23,12 @@ public class Router {
         ApiResponse handle(NanoHTTPD.IHTTPSession session, Map<String, String> pathParams);
     }
 
+    /** 直接返回 HTTP 响应的处理器（用于文件下载、打包等二进制内容）。 */
+    @FunctionalInterface
+    public interface RawHandler {
+        NanoHTTPD.Response handle(NanoHTTPD.IHTTPSession session, Map<String, String> pathParams) throws Exception;
+    }
+
     private static class Route {
         final String method;
         final Pattern pattern;
@@ -60,7 +66,18 @@ public class Router {
         }
     }
 
+    /** 原始响应路由，匹配逻辑与 JSON 路由相同。 */
+    private static class RawRoute extends Route {
+        final RawHandler rawHandler;
+
+        RawRoute(String method, String path, RawHandler handler) {
+            super(method, path, null);
+            this.rawHandler = handler;
+        }
+    }
+
     private final List<Route> routes = new ArrayList<>();
+    private final List<RawRoute> rawRoutes = new ArrayList<>();
 
     public void get(String path, RouteHandler handler) {
         routes.add(new Route("GET", path, handler));
@@ -78,8 +95,13 @@ public class Router {
         routes.add(new Route("DELETE", path, handler));
     }
 
+    /** 注册一条返回原始 HTTP 响应的 GET 路由（二进制下载等）。 */
+    public void getRaw(String path, RawHandler handler) {
+        rawRoutes.add(new RawRoute("GET", path, handler));
+    }
+
     public int size() {
-        return routes.size();
+        return routes.size() + rawRoutes.size();
     }
 
     /** 分发请求；没有匹配路由时返回 null。 */
@@ -88,6 +110,17 @@ public class Router {
             Map<String, String> params = route.match(method, path);
             if (params != null) {
                 return route.handler.handle(session, params);
+            }
+        }
+        return null;
+    }
+
+    /** 分发原始响应请求；没有匹配路由时返回 null。 */
+    public NanoHTTPD.Response dispatchRaw(String method, String path, NanoHTTPD.IHTTPSession session) throws Exception {
+        for (RawRoute route : rawRoutes) {
+            Map<String, String> params = route.match(method, path);
+            if (params != null) {
+                return route.rawHandler.handle(session, params);
             }
         }
         return null;

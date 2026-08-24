@@ -572,6 +572,60 @@ input:-webkit-autofill:focus{
   border:1px solid rgba(217,72,59,.30); }
 .sess .badge.run{ color:var(--good); background:rgba(47,158,68,.08);
   border:1px solid rgba(47,158,68,.30); }
+
+/* ---- 文件管理 ---- */
+.seg{ display:inline-flex; background:var(--elev); border:1px solid var(--line);
+  border-radius:100px; padding:3px; gap:2px; }
+.seg-btn{ border:0; background:transparent; color:var(--text-2); font-size:13px;
+  font-weight:550; padding:6px 16px; border-radius:100px; cursor:pointer;
+  font-family:var(--font-mono); }
+.seg-btn.on{ background:var(--accent); color:var(--on-accent); }
+.crumbs{ display:flex; align-items:center; gap:2px; flex-wrap:wrap; margin:2px 0 10px;
+  font-size:13px; color:var(--text-2); }
+.crumb{ border:0; background:transparent; color:var(--text-2); font-size:13px;
+  padding:4px 8px; border-radius:7px; cursor:pointer; font-family:var(--font-mono); }
+.crumb:hover{ background:var(--elev); }
+.crumb.on{ color:var(--accent); font-weight:650; cursor:default; }
+.crumbs .cs{ color:var(--text-3); }
+.flist{ display:flex; flex-direction:column; }
+.frow{ display:flex; align-items:center; gap:12px; padding:8px 4px;
+  box-shadow:inset 0 -1px 0 var(--line); }
+.frow:last-child{ box-shadow:none; }
+.frow .ficon{ flex:none; width:34px; height:34px; display:flex; align-items:center;
+  justify-content:center; border-radius:9px; background:var(--elev); color:var(--text-3); }
+.frow .ficon svg{ width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.8;
+  stroke-linecap:round; stroke-linejoin:round; }
+.frow .ficon.dir{ color:var(--warn); }
+.frow .nm{ flex:1; min-width:0; font-size:14px; font-weight:550; color:var(--text);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.frow.dir .nm{ cursor:pointer; }
+.frow.dir .nm:hover{ color:var(--accent); }
+.frow .sz{ flex:none; width:84px; text-align:right; font-size:12px; color:var(--text-3);
+  font-family:var(--font-mono); }
+.frow .tm{ flex:none; width:126px; text-align:right; font-size:12px; color:var(--text-3);
+  font-family:var(--font-mono); }
+.frow .acts{ flex:none; display:flex; gap:6px; }
+.frow .acts .btn{ padding:5px 10px; font-size:12px; border-radius:8px; }
+.frow .acts .btn.del{ color:var(--danger); }
+/* 文件预览 / 编辑弹层 */
+#fedit{ position:fixed; inset:0; z-index:90; display:none; }
+#fedit.on{ display:block; }
+#fedit .scrim{ position:absolute; inset:0; background:rgba(15,20,25,.32); }
+.fedit-card{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:min(760px,94vw); max-height:88vh; display:flex; flex-direction:column;
+  background:var(--bg-2); border:1px solid var(--line); border-radius:16px;
+  box-shadow:0 24px 80px rgba(15,20,25,.28); overflow:hidden; }
+.fedit-top{ display:flex; align-items:center; gap:10px; padding:14px 16px;
+  box-shadow:inset 0 -1px 0 var(--line); }
+.fedit-top b{ flex:1; min-width:0; font-size:14px; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; font-family:var(--font-mono); }
+.fedit-meta{ padding:9px 16px 0; font-size:12px; color:var(--text-3); }
+#feditText{ flex:1; min-height:320px; margin:10px 16px 12px; padding:12px; resize:vertical;
+  font-family:var(--font-mono); font-size:12.5px; line-height:1.55; color:var(--text);
+  background:var(--elev); border:1px solid var(--line); border-radius:10px; }
+#feditText:focus{ outline:0; border-color:var(--accent); }
+.fedit-acts{ display:flex; align-items:center; gap:8px; padding:0 16px 14px; }
+.fedit-acts .sp{ flex:1; }
 </style>
 </head>
 <body>
@@ -615,6 +669,8 @@ input:-webkit-autofill:focus{
         <span class="sq"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.6"/><circle cx="12" cy="12" r="2.4"/><path d="M6 9.6v4.8M18 9.6v4.8"/></svg></span>经济</button>
       <button class="tab" role="tab" data-view="monitor" aria-selected="false">
         <span class="sq"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg></span>监控</button>
+      <button class="tab" role="tab" data-view="files" aria-selected="false">
+        <span class="sq"><svg viewBox="0 0 24 24"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.2l2 2h6.8A2.5 2.5 0 0 1 21 8.5v9A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></span>文件</button>
     </nav>
     <div style="margin-top:auto; padding-top:16px">
       <button class="btn sm" style="width:100%" id="logoutBtn">退出登录</button>
@@ -716,6 +772,27 @@ input:-webkit-autofill:focus{
         <div id="monSessions"></div>
       </div>
     </section>
+
+    <!-- 文件管理 -->
+    <section class="view" id="v-files">
+      <div class="head">
+        <div><h2>文件</h2><p id="fileLine">—</p></div>
+        <div style="display:flex; gap:9px">
+          <button class="btn" id="fileUp">上级</button>
+          <button class="btn" id="fileRefresh">刷新</button>
+          <button class="btn" id="fileZip">打包下载 zip</button>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+        <div class="seg" id="fileRoots">
+          <button class="seg-btn on" data-root="data">data</button>
+          <button class="seg-btn" data-root="userdata">userdata</button>
+        </div>
+        <span style="font-size:12.5px; color:var(--text-3)">删除前自动备份到 backups/，所有改动都会记录日志</span>
+      </div>
+      <div class="crumbs" id="fileCrumbs"></div>
+      <div class="flist" id="fileList"></div>
+    </section>
   </main>
 </div>
 
@@ -746,6 +823,24 @@ input:-webkit-autofill:focus{
     <div class="dlg-acts">
       <button type="button" id="dlgNo">取消</button>
       <button type="button" id="dlgYes">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 文件预览 / 编辑 -->
+<div id="fedit" role="dialog" aria-modal="true">
+  <div class="scrim" id="feditScrim"></div>
+  <div class="fedit-card glass">
+    <div class="fedit-top">
+      <b id="feditTitle">—</b>
+      <button class="sheet-x" id="feditClose" type="button" aria-label="关闭">✕</button>
+    </div>
+    <div class="fedit-meta" id="feditMeta"></div>
+    <textarea id="feditText" spellcheck="false" readonly></textarea>
+    <div class="fedit-acts">
+      <button class="btn sm" id="feditMore" style="display:none">加载更多</button>
+      <span class="sp"></span>
+      <button class="btn sm" id="feditSave" style="display:none">保存</button>
     </div>
   </div>
 </div>
@@ -904,6 +999,7 @@ $$(".tab").forEach(tab => tab.addEventListener("click", () => {
   if (view === "economy") loadEconomy();
   if (view === "monitor"){ loadMonitor(); startMonAutoRefresh(); }
   else stopMonAutoRefresh();
+  if (view === "files") loadFiles();
 }));
 
 /* ---------------------------- 概览 ---------------------------- */
@@ -1747,6 +1843,221 @@ async function loadMonitor(){
 }
 $("#refreshMon").addEventListener("click", loadMonitor);
 
+/* ---------------------------- 文件管理 ---------------------------- */
+let fileState = { root: "data", path: "" };
+let feditState = { root: "data", path: "", page: 0, editable: false };
+
+// 静态 SVG（不掺任何数据，仅图标），因此可以安全地用 innerHTML 挂载
+const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.2l2 2h6.8A2.5 2.5 0 0 1 21 8.5v9A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>';
+const FILE_SVG = '<svg viewBox="0 0 24 24"><path d="M6 2.8h7.4L19 8.4V21.2H6z"/><path d="M13.2 2.8V8.6h5.6"/></svg>';
+
+function fmtSize(bytes){
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / 1048576).toFixed(2) + " MB";
+}
+function fmtFsTime(ms){
+  if (!ms) return "—";
+  const d = new Date(ms), p = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate())
+    + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+
+async function loadFiles(){
+  const list = $("#fileList");
+  list.textContent = "";
+  let d;
+  try{
+    d = await api("/files/list?root=" + encodeURIComponent(fileState.root)
+      + "&path=" + encodeURIComponent(fileState.path));
+  }catch(err){ toast(err.message, true); return; }
+
+  $("#fileLine").textContent = d.root + (d.path ? "/" + d.path : "") + " · " + d.count + " 项";
+  $("#fileUp").disabled = !d.path;
+
+  const crumbs = $("#fileCrumbs");
+  crumbs.textContent = "";
+  const parts = d.path ? d.path.split("/") : [];
+  let acc = "";
+  const addCrumb = (label, path) => {
+    const b = document.createElement("button");
+    b.className = "crumb" + (path === d.path ? " on" : "");
+    b.textContent = label;
+    b.addEventListener("click", () => { fileState.path = path; loadFiles(); });
+    crumbs.append(b);
+    if (path !== d.path){
+      const s = document.createElement("span"); s.className = "cs"; s.textContent = "/";
+      crumbs.append(s);
+    }
+  };
+  addCrumb(d.root, "");
+  parts.forEach(part => { acc = acc ? acc + "/" + part : part; addCrumb(part, acc); });
+
+  if (!d.entries.length){
+    const empty = document.createElement("div"); empty.className = "empty";
+    empty.textContent = "空目录";
+    list.append(empty);
+    return;
+  }
+  d.entries.forEach(entry => {
+    const row = document.createElement("div"); row.className = "frow" + (entry.isDir ? " dir" : "");
+    const icon = document.createElement("span");
+    icon.className = "ficon" + (entry.isDir ? " dir" : "");
+    icon.innerHTML = entry.isDir ? FOLDER_SVG : FILE_SVG;
+    row.append(icon);
+
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = entry.name;
+    row.append(nm);
+    const sz = document.createElement("span"); sz.className = "sz";
+    sz.textContent = entry.isDir ? "—" : fmtSize(entry.size);
+    row.append(sz);
+    const tm = document.createElement("span"); tm.className = "tm";
+    tm.textContent = fmtFsTime(entry.modified);
+    row.append(tm);
+
+    const acts = document.createElement("span"); acts.className = "acts";
+    if (entry.isDir){
+      const open = document.createElement("button"); open.className = "btn"; open.textContent = "打开";
+      open.addEventListener("click", () => {
+        fileState.path = fileState.path ? fileState.path + "/" + entry.name : entry.name;
+        loadFiles();
+      });
+      acts.append(open);
+    }else{
+      if (entry.text){
+        const view = document.createElement("button"); view.className = "btn"; view.textContent = "查看";
+        view.addEventListener("click", () => openFileModal(entry));
+        acts.append(view);
+      }
+      const dl = document.createElement("button"); dl.className = "btn"; dl.textContent = "下载";
+      dl.addEventListener("click", () => downloadFileEntry(entry));
+      acts.append(dl);
+      const del = document.createElement("button"); del.className = "btn del"; del.textContent = "删除";
+      del.addEventListener("click", () => deleteFileEntry(entry));
+      acts.append(del);
+    }
+    row.append(acts);
+    list.append(row);
+  });
+}
+
+async function openFileModal(entry){
+  const path = fileState.path ? fileState.path + "/" + entry.name : entry.name;
+  const base = "/files/preview?root=" + encodeURIComponent(fileState.root)
+    + "&path=" + encodeURIComponent(path);
+  let d;
+  try{ d = await api(base + (entry.editable ? "&page=full" : "&page=0")); }
+  catch(err){ toast(err.message, true); return; }
+
+  feditState = { root: fileState.root, path, page: d.page || 0, editable: !!d.editable };
+  $("#feditTitle").textContent = fileState.root + "/" + path;
+  $("#feditMeta").textContent = fmtSize(d.size) + (d.editable ? " · 可编辑（保存时校验格式）" : " · 只读（超过 2 MB）");
+  const ta = $("#feditText");
+  ta.readOnly = !d.editable;
+  ta.value = d.editable ? d.content : (d.lines || []).join("\n");
+  $("#feditMore").style.display = (!d.editable && d.hasMore) ? "" : "none";
+  $("#feditSave").style.display = d.editable ? "" : "none";
+  $("#fedit").classList.add("on");
+  if (d.editable) ta.focus();
+}
+function closeFedit(){ $("#fedit").classList.remove("on"); }
+$("#feditClose").addEventListener("click", closeFedit);
+$("#feditScrim").addEventListener("click", closeFedit);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeFedit(); });
+
+$("#feditMore").addEventListener("click", async () => {
+  const base = "/files/preview?root=" + encodeURIComponent(feditState.root)
+    + "&path=" + encodeURIComponent(feditState.path);
+  let d;
+  try{ d = await api(base + "&page=" + (feditState.page + 1)); }
+  catch(err){ toast(err.message, true); return; }
+  const ta = $("#feditText");
+  ta.value = ta.value.replace(/\n$/, "") + "\n" + (d.lines || []).join("\n");
+  feditState.page = d.page;
+  $("#feditMore").style.display = d.hasMore ? "" : "none";
+});
+
+$("#feditSave").addEventListener("click", async () => {
+  veil(true, "保存中…");
+  try{
+    await api("/files/edit", "POST",
+      { root: feditState.root, path: feditState.path, content: $("#feditText").value });
+    toast("已保存 " + feditState.path);
+  }catch(err){ toast(err.message, true); }
+  finally{ veil(false); }
+});
+
+async function deleteFileEntry(entry){
+  const path = fileState.path ? fileState.path + "/" + entry.name : entry.name;
+  const ok = await ask({
+    title: "确认删除",
+    message: "删除 " + fileState.root + "/" + path + (entry.isDir ? "（整个目录）" : "")
+      + "？删除前会自动备份到 backups/ 目录。",
+    danger: true, confirmText: "删除"
+  });
+  if (!ok) return;
+  veil(true, "删除中…");
+  try{
+    const d = await api("/files/delete", "POST", { root: fileState.root, path });
+    toast("已删除，备份: backups/" + (d.backup || ""));
+    loadFiles();
+  }catch(err){ toast(err.message, true); }
+  finally{ veil(false); }
+}
+
+async function downloadFileEntry(entry){
+  const path = fileState.path ? fileState.path + "/" + entry.name : entry.name;
+  await fileDownload("/files/download?root=" + encodeURIComponent(fileState.root)
+    + "&path=" + encodeURIComponent(path), entry.name);
+}
+/** 带 Bearer 会话头的二进制下载：fetch → blob → 触发浏览器保存。 */
+async function fileDownload(query, filename){
+  veil(true, "下载中…");
+  try{
+    const res = await fetch("/api" + query, {
+      headers: store.token ? { "Authorization": "Bearer " + store.token } : {}
+    });
+    if (res.status === 401){ store.token = null; showLogin("会话已过期，请重新登录"); return; }
+    if (!res.ok){
+      let msg = "下载失败（HTTP " + res.status + "）";
+      try{ const j = await res.json(); if (j && j.message) msg = j.message; }catch(_){}
+      toast(msg, true);
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename || "download";
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }catch(err){ toast("下载失败: " + err.message, true); }
+  finally{ veil(false); }
+}
+
+$("#fileZip").addEventListener("click", async () => {
+  const root = fileState.root;
+  const ok = await ask({
+    title: "打包下载",
+    message: "把整个 " + root + " 目录打包成 zip 下载？文件较多时生成会稍慢。",
+    confirmText: "打包"
+  });
+  if (!ok) return;
+  await fileDownload("/files/zip?root=" + encodeURIComponent(root),
+    "essentialengine-" + root + ".zip");
+});
+
+$$("#fileRoots .seg-btn").forEach(btn => btn.addEventListener("click", () => {
+  $$("#fileRoots .seg-btn").forEach(b => b.classList.toggle("on", b === btn));
+  fileState = { root: btn.dataset.root, path: "" };
+  loadFiles();
+}));
+$("#fileUp").addEventListener("click", () => {
+  const i = fileState.path.lastIndexOf("/");
+  fileState.path = i >= 0 ? fileState.path.slice(0, i) : "";
+  loadFiles();
+});
+$("#fileRefresh").addEventListener("click", loadFiles);
+
 /* ---------------------------- OAuth ---------------------------- */
 $("#oauthBtn").addEventListener("click", async () => {
   const btn = $("#oauthBtn");
@@ -1776,6 +2087,8 @@ async function applyLoginMethods(){
   if (typeof info.monitorRefreshSeconds === "number" && info.monitorRefreshSeconds >= 0){
     monRefreshMs = info.monitorRefreshSeconds * 1000;
   }
+  // 文件管理默认关闭；没开就不显示「文件」页签
+  $('[data-view="files"]').style.display = info.fileManager ? "" : "none";
 }
 
 /**

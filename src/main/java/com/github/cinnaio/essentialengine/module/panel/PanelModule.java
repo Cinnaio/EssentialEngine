@@ -68,6 +68,10 @@ public class PanelModule extends EngineModule {
         Router router = new Router();
         new PanelApi(plugin, sessions, new ConfigService(plugin), oidc, avatarSources, recentPlayers)
                 .register(router);
+        if (plugin.getConfig().getBoolean(path("file-manager"), false)) {
+            new FileManagerApi(plugin).register(router);
+            plugin.getLogger().info("[Panel] 文件管理已启用（data / userdata）");
+        }
 
         HttpLogging.quietClientDisconnects(() -> plugin.getConfig().getBoolean("debug", false));
         server = new PanelServer(bindAddress, port, router, sessions,

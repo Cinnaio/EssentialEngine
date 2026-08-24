@@ -72,7 +72,8 @@ public class PanelApi {
                         "modules.panel.oauth.button-text", "使用 OAuth 登录"),
                 "avatars", avatarSources,
                 "monitorRefreshSeconds", Math.max(0, plugin.getConfig().getInt(
-                        "modules.panel.monitor-refresh-seconds", 1)))));
+                        "modules.panel.monitor-refresh-seconds", 1)),
+                "fileManager", plugin.getConfig().getBoolean("modules.panel.file-manager", false))));
 
         router.get("/api/oauth/start", (session, params) -> {
             if (oidc == null) {

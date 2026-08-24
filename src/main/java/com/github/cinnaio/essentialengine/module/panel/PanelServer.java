@@ -143,6 +143,11 @@ public class PanelServer extends NanoHTTPD {
         }
 
         try {
+            // 先试原始响应（文件下载 / zip 打包等二进制内容），没有再走 JSON 路由
+            Response raw = router.dispatchRaw(method, uri, session);
+            if (raw != null) {
+                return harden(raw);
+            }
             ApiResponse response = router.dispatch(method, uri, session);
             if (response == null) {
                 return json(Response.Status.NOT_FOUND, ApiResponse.error("接口不存在: " + uri));
