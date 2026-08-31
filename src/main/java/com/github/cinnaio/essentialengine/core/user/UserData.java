@@ -5,6 +5,10 @@ import org.bukkit.Location;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -36,6 +40,8 @@ public class UserData {
     private long lastLogin;
     private long lastSeen;
     private long playtime;
+    /** 按服务器本地日期累计的在线时长，用于玩家中心趋势和活跃排行。 */
+    private final Map<String, Long> activityByDay = new LinkedHashMap<>();
 
     private final Map<String, Map<String, Object>> homes = new LinkedHashMap<>();
     private Map<String, Object> lastLocation;
@@ -65,6 +71,10 @@ public class UserData {
     private transient boolean afk;
     private transient long lastActivity = System.currentTimeMillis();
     private transient long sessionStart;
+    /** 已经结算进 playtime / activityByDay 的本次会话时间点。 */
+    private transient long sessionCheckpoint;
+    /** 本次会话已结算的时长，供占位符等调用方读取完整会话时长。 */
+    private transient long sessionPlaytime;
     private transient UUID replyTarget;
     private transient volatile boolean dirty;
 
@@ -213,20 +223,43 @@ public class UserData {
         markDirty();
     }
 
-    /** 累计在线时长（毫秒），不含本次会话。 */
-    public long getPlaytime() {
+    /** 累计在线时长（毫秒），不含尚未结算的本次会话尾段。 */
+    public synchronized long getPlaytime() {
         return playtime;
     }
 
-    public void addPlaytime(long millis) {
+    public synchronized void addPlaytime(long millis) {
         if (millis > 0) {
             this.playtime += millis;
             markDirty();
         }
     }
 
-    public long getTotalPlaytime() {
-        return sessionStart > 0 ? playtime + (System.currentTimeMillis() - sessionStart) : playtime;
+    /** 累计在线时长（毫秒），含本次会话尚未结算的尾段。 */
+    public synchronized long getTotalPlaytime() {
+        if (sessionStart <= 0) {
+            return playtime;
+        }
+        long checkpoint = sessionCheckpoint > 0 ? sessionCheckpoint : sessionStart;
+        return playtime + Math.max(0L, System.currentTimeMillis() - checkpoint);
+    }
+
+    /** 本次会话时长（含已自动保存的部分和未结算的尾段）。 */
+    public synchronized long getSessionPlaytime() {
+        if (sessionStart <= 0) {
+            return 0L;
+        }
+        long checkpoint = sessionCheckpoint > 0 ? sessionCheckpoint : sessionStart;
+        return sessionPlaytime + Math.max(0L, System.currentTimeMillis() - checkpoint);
+    }
+
+    /**
+     * 返回按服务器本地日期累计的在线时长。
+     *
+     * <p>返回副本，避免 Web API 或其它异步调用方修改玩家内部状态。</p>
+     */
+    public synchronized Map<String, Long> getActivityByDay() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(activityByDay));
     }
 
     // ------------------------------------------------------------------ 家
@@ -481,14 +514,69 @@ public class UserData {
     }
 
     public void startSession() {
-        this.sessionStart = System.currentTimeMillis();
-        this.lastActivity = this.sessionStart;
+        startSession(System.currentTimeMillis());
     }
 
-    public void endSession() {
+    /** 使用指定时间开始会话，便于时间边界测试。 */
+    public synchronized void startSession(long now) {
+        this.sessionStart = now;
+        this.sessionCheckpoint = now;
+        this.sessionPlaytime = 0L;
+        this.lastActivity = now;
+    }
+
+    /**
+     * 把本次会话自上次检查点以来的时间结算进总时长和每日统计。
+     *
+     * <p>自动保存会周期性调用它，所以正常关服之外的异常退出也只会损失最后一个
+     * 自动保存周期，而不是整段会话。</p>
+     */
+    public synchronized long checkpointSession() {
+        return checkpointSession(System.currentTimeMillis());
+    }
+
+    /** 使用指定时间结算会话，便于时间边界测试。 */
+    public synchronized long checkpointSession(long now) {
+        if (sessionStart <= 0) {
+            return 0L;
+        }
+        long from = sessionCheckpoint > 0 ? sessionCheckpoint : sessionStart;
+        if (now <= from) {
+            return 0L;
+        }
+
+        recordActivity(from, now);
+        long elapsed = now - from;
+        playtime += elapsed;
+        sessionPlaytime += elapsed;
+        sessionCheckpoint = now;
+        markDirty();
+        return elapsed;
+    }
+
+    public synchronized void endSession() {
         if (sessionStart > 0) {
-            addPlaytime(System.currentTimeMillis() - sessionStart);
+            checkpointSession(System.currentTimeMillis());
             sessionStart = 0;
+            sessionCheckpoint = 0;
+            sessionPlaytime = 0;
+        }
+    }
+
+    /** 把一段时间按本地日期拆分，跨午夜时不会把全部时长记到同一天。 */
+    private void recordActivity(long from, long to) {
+        ZoneId zone = ZoneId.systemDefault();
+        long cursor = from;
+        while (cursor < to) {
+            LocalDate day = Instant.ofEpochMilli(cursor).atZone(zone).toLocalDate();
+            long nextDay = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli();
+            long end = Math.min(to, nextDay);
+            long duration = end - cursor;
+            if (duration > 0) {
+                String key = day.format(DateTimeFormatter.ISO_LOCAL_DATE);
+                activityByDay.merge(key, duration, Long::sum);
+            }
+            cursor = end;
         }
     }
 
@@ -518,7 +606,7 @@ public class UserData {
 
     // ------------------------------------------------------------------ 序列化
 
-    public Map<String, Object> serialize() {
+    public synchronized Map<String, Object> serialize() {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("uuid", uuid.toString());
         map.put("name", name);
@@ -533,6 +621,9 @@ public class UserData {
         map.put("last-login", lastLogin);
         map.put("last-seen", lastSeen);
         map.put("playtime", playtime);
+        if (!activityByDay.isEmpty()) {
+            map.put("activity-by-day", new LinkedHashMap<>(activityByDay));
+        }
 
         if (!homes.isEmpty()) {
             map.put("homes", new LinkedHashMap<>(homes));
@@ -595,6 +686,16 @@ public class UserData {
         data.lastLogin = (long) num(map.get("last-login"), 0D);
         data.lastSeen = (long) num(map.get("last-seen"), 0D);
         data.playtime = (long) num(map.get("playtime"), 0D);
+
+        Object activity = map.get("activity-by-day");
+        if (activity instanceof Map<?, ?> activityMap) {
+            for (Map.Entry<?, ?> entry : activityMap.entrySet()) {
+                long duration = (long) num(entry.getValue(), 0D);
+                if (duration > 0) {
+                    data.activityByDay.put(String.valueOf(entry.getKey()), duration);
+                }
+            }
+        }
 
         Object homes = map.get("homes");
         if (homes instanceof Map<?, ?> homeMap) {

@@ -5,7 +5,9 @@ import com.github.cinnaio.essentialengine.core.module.EngineModule;
 import com.github.cinnaio.essentialengine.module.husktowns.HuskTownsModule;
 import com.github.cinnaio.essentialengine.module.monitor.MonitorEndpoint;
 import com.github.cinnaio.essentialengine.module.monitor.MonitorModule;
+import com.github.cinnaio.essentialengine.module.playerstats.PlayerStatsModule;
 import com.github.cinnaio.essentialengine.module.webapi.endpoint.EssentialsEndpoint;
+import com.github.cinnaio.essentialengine.module.webapi.endpoint.PlayerStatsEndpoint;
 import com.github.cinnaio.essentialengine.module.webapi.endpoint.ServerEndpoint;
 import com.github.cinnaio.essentialengine.module.webapi.endpoint.TownEndpoint;
 import com.github.cinnaio.essentialengine.module.webapi.http.AuthMiddleware;
@@ -48,6 +50,12 @@ public class WebApiModule extends EngineModule {
         Router router = new Router();
         new ServerEndpoint(plugin).register(router);
         new EssentialsEndpoint(plugin).register(router);
+
+        if (plugin.modules().get("playerstats") instanceof PlayerStatsModule stats
+                && stats.isEnabled()) {
+            new PlayerStatsEndpoint(plugin, stats.service()).register(router);
+            plugin.getLogger().info("[WebAPI] 已挂载玩家中心统计接口");
+        }
 
         if (plugin.modules().get("husktowns") instanceof HuskTownsModule module && module.isEnabled()) {
             new TownEndpoint(plugin, module.getService()).register(router);

@@ -98,6 +98,8 @@ Bukkit 会先对所有插件依次调用 `onLoad()`，然后才开始调用任�
 | GET | `/api/server/plugins` | 已安装插件 |
 | POST | `/api/server/command` | 以控制台身份执行命令（可配白名单） |
 | GET | `/api/essentials/players/{name}` | 玩家档案（**离线也能查**） |
+| GET | `/api/essentials/players/{name}/stats` | 玩家中心档案、累计时长、每日活跃时长与排名 |
+| GET | `/api/essentials/leaderboards/playtime?limit=10` | 全服累计游玩时长排行榜 |
 | GET | `/api/essentials/homes/{name}` | 某玩家的家列表 |
 | GET | `/api/essentials/warps` | 地标列表 |
 | GET | `/api/essentials/economy/top?limit=10` | 余额排行榜 |
@@ -108,6 +110,10 @@ Bukkit 会先对所有插件依次调用 `onLoad()`，然后才开始调用任�
 
 安全提示：`bind-address` 默认是 `127.0.0.1`（只允许本机访问）。
 若确实需要公网访问，请务必换成足够随机的 `api-key`，并在防火墙上限制来源 IP。
+
+玩家统计由 `modules.playerstats` 控制，默认开启。玩家每次自动保存时会把当前会话拆分到本地日期，
+因此 `/stats` 可以返回每日活跃时长；排行榜默认缓存 15 秒，修改
+`leaderboard-cache-seconds` 可调整缓存时间。
 
 ---
 

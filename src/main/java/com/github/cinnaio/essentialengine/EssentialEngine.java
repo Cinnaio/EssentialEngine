@@ -22,6 +22,7 @@ import com.github.cinnaio.essentialengine.module.monitor.MonitorModule;
 import com.github.cinnaio.essentialengine.module.panel.PanelModule;
 import com.github.cinnaio.essentialengine.module.papi.PapiModule;
 import com.github.cinnaio.essentialengine.module.player.PlayerModule;
+import com.github.cinnaio.essentialengine.module.playerstats.PlayerStatsModule;
 import com.github.cinnaio.essentialengine.module.teleport.TeleportModule;
 import com.github.cinnaio.essentialengine.module.webapi.WebApiModule;
 import com.github.cinnaio.essentialengine.module.world.WorldModule;
@@ -167,6 +168,7 @@ public class EssentialEngine extends JavaPlugin {
         modules.register(new CoreModule(this));
         modules.register(new TeleportModule(this));
         modules.register(new PlayerModule(this));
+        modules.register(new PlayerStatsModule(this));
         modules.register(new WorldModule(this));
         modules.register(new ChatModule(this));
         modules.register(new AdminModule(this));

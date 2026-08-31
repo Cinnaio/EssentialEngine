@@ -138,6 +138,13 @@ modules:
     reset-fly-on-death: false
     reset-god-on-death: false
 
+  # ---------------- 玩家统计 ----------------
+  # 为 EnderPass 玩家中心提供每日活跃时长与全服游玩时长排行榜。
+  playerstats:
+    enabled: true
+    # 排行榜扫描缓存，单位秒；设为 0 可关闭缓存。
+    leaderboard-cache-seconds: 15
+
   # ---------------- 世界控制 ----------------
   # /time /weather
   # /time day|night|noon|midnight|sunrise|sunset、/time set <刻>、/time add <刻>、/time query

@@ -504,7 +504,7 @@ public class EnginePlaceholders extends PlaceholderExpansion {
     }
 
     private long sessionMillis(UserData data) {
-        return Math.max(0, data.getTotalPlaytime() - data.getPlaytime());
+        return data.getSessionPlaytime();
     }
 
     private long idleMillis(UserData data) {

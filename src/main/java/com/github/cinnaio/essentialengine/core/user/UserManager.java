@@ -170,6 +170,9 @@ public class UserManager {
         if (data == null) {
             return;
         }
+        // 任何显式保存都顺手结算当前会话，避免经济 / 面板等保存路径把
+        // 最近一段在线时间留到下一轮自动保存才落盘。
+        data.checkpointSession();
         try {
             storage().saveUser(data.getUuid(), data.getName(), data.getBalance(), data.serialize());
             data.clearDirty();
@@ -182,6 +185,9 @@ public class UserManager {
     public void flushDirty() {
         int count = 0;
         for (UserData data : users.onlineValues()) {
+            // 结算本次会话的增量后再判断 dirty：这样总时长和每日活跃统计会
+            // 随自动保存落盘，服务器异常退出时最多损失一个自动保存周期。
+            data.checkpointSession();
             if (data.isDirty()) {
                 saveBlocking(data);
                 count++;

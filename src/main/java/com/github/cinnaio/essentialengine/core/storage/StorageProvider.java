@@ -1,6 +1,8 @@
 package com.github.cinnaio.essentialengine.core.storage;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,6 +41,40 @@ public interface StorageProvider {
     LinkedHashMap<String, Double> topBalances(int limit) throws Exception;
 
     /**
+     * 游玩时长排行榜，返回顺序即名次。
+     *
+     * <p>玩家档案的复杂字段统一存在 {@code data} 中，因此默认实现按已有的
+     * {@link #allUsers()} / {@link #loadUser(UUID)} 读取并排序。后端可以在未来把
+     * playtime 单独建索引来替换这个实现，而不会改变上层接口。</p>
+     */
+    default List<PlaytimeSummary> topPlaytime(int limit) throws Exception {
+        List<PlaytimeSummary> result = new ArrayList<>();
+        for (UUID uuid : allUsers()) {
+            Map<String, Object> data = loadUser(uuid);
+            if (data == null) {
+                continue;
+            }
+            String name = valueString(data.get("name"));
+            if (name.isEmpty()) {
+                continue;
+            }
+            result.add(new PlaytimeSummary(
+                    uuid,
+                    name,
+                    valueLong(data.get("playtime")),
+                    valueLong(data.get("first-join")),
+                    valueLong(data.get("last-seen"))));
+        }
+
+        result.sort(Comparator.comparingLong(PlaytimeSummary::playtimeMs).reversed()
+                .thenComparing(PlaytimeSummary::name, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(summary -> summary.uuid().toString()));
+
+        int count = Math.max(1, limit);
+        return result.size() <= count ? result : new ArrayList<>(result.subList(0, count));
+    }
+
+    /**
      * 按名字片段搜索玩家（含离线），不区分大小写，按名字排序。
      *
      * <p>{@code query} 为空时返回空列表——「列出全部玩家」对老服来说是几万条，
@@ -46,6 +82,23 @@ public interface StorageProvider {
      */
     default List<UserSummary> searchUsers(String query, int limit) throws Exception {
         return List.of();
+    }
+
+    /** 从 YAML / JSON 兼容读取一个字符串字段。 */
+    private static String valueString(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    /** Gson 会把 JSON 数字还原成 Double，统一转成长整型。 */
+    private static long valueLong(Object value) {
+        if (value instanceof Number number) {
+            return Math.max(0L, number.longValue());
+        }
+        try {
+            return Math.max(0L, Long.parseLong(String.valueOf(value)));
+        } catch (Exception ignored) {
+            return 0L;
+        }
     }
 
     /** 读取全局数据（如 warps、spawn），不存在时返回 null。 */
