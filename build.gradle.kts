@@ -41,6 +41,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testCompileOnly("io.papermc.paper:paper-api:${property("paperVersion")}")
     testRuntimeOnly("io.papermc.paper:paper-api:${property("paperVersion")}")
+    testImplementation("net.william278.husktowns:husktowns-bukkit:${property("husktownsVersion")}")
 }
 
 tasks.test {

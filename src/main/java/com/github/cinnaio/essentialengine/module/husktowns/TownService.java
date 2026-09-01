@@ -192,18 +192,30 @@ public class TownService {
 
     public Map<String, Object> getPlayerTown(UUID playerUuid) {
         Player player = Bukkit.getPlayer(playerUuid);
-        if (player == null) {
-            return error("玩家不在线: " + playerUuid);
+        if (player != null) {
+            Optional<Member> memberOpt = api.getUserTown(player);
+            if (memberOpt.isPresent()) {
+                Member member = memberOpt.get();
+                Map<String, Object> result = new HashMap<>();
+                result.put("town", townToMap(member.town()));
+                result.put("role", member.role().getName());
+                result.put("player", player.getName());
+                return result;
+            }
         }
-        Optional<Member> memberOpt = api.getUserTown(player);
-        if (memberOpt.isEmpty()) {
+
+        // Town#getMembers 保存的是完整成员 UUID，不依赖 Bukkit 的在线玩家对象，
+        // 因此离线玩家也可以通过这里找到所属城镇。
+        Optional<TownMembership> membership = findTownMembership(playerUuid, api.getTowns());
+        if (membership.isEmpty()) {
             return error("该玩家不属于任何城镇");
         }
-        Member member = memberOpt.get();
+
+        TownMembership found = membership.get();
         Map<String, Object> result = new HashMap<>();
-        result.put("town", townToMap(member.town()));
-        result.put("role", member.role().getName());
-        result.put("player", player.getName());
+        result.put("town", townToMap(found.town()));
+        result.put("role", buildRoleNameMap().getOrDefault(found.roleWeight(), "Member"));
+        result.put("player", player != null ? player.getName() : playerUuid.toString());
         return result;
     }
 
@@ -234,6 +246,31 @@ public class TownService {
     }
 
     // ------------------------------------------------------------------ 内部工具
+
+    /**
+     * 在城镇成员表中按 UUID 查找玩家。
+     *
+     * <p>不要用 {@code Bukkit.getPlayer(UUID)} 替代这里的查找：Bukkit 只返回在线玩家，
+     * 而 HuskTowns 的城镇成员表同时包含在线和离线成员。</p>
+     */
+    static Optional<TownMembership> findTownMembership(UUID playerUuid, Iterable<Town> towns) {
+        if (playerUuid == null || towns == null) {
+            return Optional.empty();
+        }
+        for (Town town : towns) {
+            if (town == null) {
+                continue;
+            }
+            Integer roleWeight = town.getMembers().get(playerUuid);
+            if (roleWeight != null) {
+                return Optional.of(new TownMembership(town, roleWeight));
+            }
+        }
+        return Optional.empty();
+    }
+
+    record TownMembership(Town town, int roleWeight) {
+    }
 
     private Map<String, Object> townToMap(Town town) {
         Map<String, Object> map = new HashMap<>();
