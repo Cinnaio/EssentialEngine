@@ -1,7 +1,7 @@
 name: EssentialEngine
 version: '${version}'
 main: com.github.cinnaio.essentialengine.EssentialEngine
-api-version: '1.21'
+api-version: '26.1'
 folia-supported: true
 description: 模块化服务器基础功能插件 —— 传送、玩家指令、聊天、管理、经济，并内置可选的 REST API 与 HuskTowns 对接
 authors:

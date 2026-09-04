@@ -39,7 +39,7 @@ import java.util.logging.Level;
  * 全部以模块形式内置于同一个插件，可在 config.yml 中逐个开关；
  * 同时保留了可选的 REST API 与 HuskTowns 对接能力。</p>
  *
- * <p>兼容 Paper 与 Folia（1.21.4+）。</p>
+ * <p>兼容 Paper 与 Folia 26.1.x（已用 26.1.2 验证），运行环境为 Java 25。</p>
  */
 public class EssentialEngine extends JavaPlugin {
 

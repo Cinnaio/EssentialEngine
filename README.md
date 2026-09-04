@@ -1,7 +1,9 @@
 # EssentialEngine
 
 模块化的 Minecraft 服务器**基础功能插件**，提供 CMI / EssentialsX 风格的常用功能，
-兼容 **Paper 与 Folia（1.21.4+）**。
+兼容 **Paper 与 Folia 26.1.x**（已用 26.1.2 验证），运行环境为 Java 25。
+
+主分支面向 26.1；旧版 1.21.4 构建保留在 `legacy/1.21.4` 分支。
 
 > 本项目由 LinkEngine（原 mc-server-bridge）演进而来：原先的四个 Gradle 子项目
 > （bridge-core / bridge-servercore / bridge-husktowns / bridge-plugin）已经合并为
