@@ -23,9 +23,9 @@ import java.util.Map;
  *
  * <p>预留的接口契约（详见 README「性能监控与 AstrBot 预留接口」）：</p>
  * <pre>
- * GET  /api/monitor/status                  当前状态快照（TPS / 内存 / 在线 / 会话）
+ * GET  /api/monitor/status                  当前状态快照（TPS / 内存 / 在线 / Tick / Spark / 会话）
  * GET  /api/monitor/samples?minutes=&limit= 性能采样历史（按时间正序）
- * GET  /api/monitor/events?limit=&type=&since= 最近事件（倒序，可按类型过滤）
+ * GET  /api/monitor/events?limit=&type=&since= 最近事件（倒序，可按类型过滤，卡顿含诊断 data）
  * GET  /api/monitor/sessions                会话记录（启动 / 关闭配对，含异常退出）
  * POST /api/monitor/events                  写入自定义事件（需 allow-custom-events）
  * </pre>

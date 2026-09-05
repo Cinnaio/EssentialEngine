@@ -15,12 +15,24 @@ public record MonitorConfig(
         int retentionDays,
         /** 内存里保留最近多少条采样，供快速查询（历史数据在存储里）。 */
         int memorySamples,
-        /** 是否记录严重卡顿事件（TPS 低于阈值）与恢复事件。 */
+        /** 是否记录严重卡顿事件（慢 Tick 或 TPS 低于阈值）与恢复事件。 */
         boolean recordLag,
         /** 卡顿判定阈值：TPS 低于该值记为一次卡顿事件。 */
         double lagThresholdTps,
         /** 同一时段卡顿事件的去重间隔（秒）。 */
         int lagCooldownSeconds,
+        /** 单个 Tick 超过该时长（毫秒）时开始记录一次卡顿事件。 */
+        double lagTickThresholdMs,
+        /** 连续多少个正常 Tick 后结束一次卡顿事件。 */
+        int lagRecoveryTicks,
+        /** 是否保留卡顿期间的主线程异步堆栈采样。 */
+        boolean captureThreadStacks,
+        /** 主线程堆栈采样间隔（毫秒）。 */
+        int threadStackSampleIntervalMs,
+        /** 每个主线程堆栈采样最多保留多少层。 */
+        int threadStackDepth,
+        /** 是否读取已安装 Spark 的公开健康指标 API。 */
+        boolean integrateSpark,
         /** 是否记录内存占用过高告警事件。 */
         boolean recordMemory,
         /** 内存告警阈值：已用内存占比超过该百分比时告警。 */

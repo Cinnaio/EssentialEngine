@@ -5,9 +5,9 @@ import java.util.Map;
 /**
  * 一条监控事件记录。
  *
- * <p>{@code type} 是结构化的事件类型（如 {@code lag}、{@code server_stop}、
- * {@code abnormal_shutdown}），{@code message} 是给人看的中文描述，
- * {@code data} 携带结构化字段（TPS、阈值、原因等），供 API 调用方
+ * <p>{@code type} 是结构化的事件类型（如 {@code lag}、{@code lag_recovered}、
+ * {@code server_stop}、{@code abnormal_shutdown}），{@code message} 是给人看的中文描述，
+ * {@code data} 携带结构化字段（Tick、GC、主线程热点、Spark 指标、疑似原因等），供 API 调用方
  * （如 AstrBot、网页面板）自行解析。</p>
  *
  * <p>随 {@code storage.type} 持久化：YAML 后端写成 JSONL 文件

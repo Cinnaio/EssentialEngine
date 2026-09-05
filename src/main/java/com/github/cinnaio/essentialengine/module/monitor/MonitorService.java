@@ -6,10 +6,18 @@ import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.storage.MonitorEvent;
 import com.github.cinnaio.essentialengine.core.storage.PerfSample;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
+import com.sun.management.GarbageCollectionNotificationInfo;
 import org.bukkit.Bukkit;
 
+import javax.management.Notification;
+import javax.management.NotificationEmitter;
+import javax.management.NotificationListener;
+import javax.management.openmbean.CompositeData;
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +34,10 @@ import java.util.logging.Level;
  * <p><b>采样不打扰主线程</b>：采样定时任务跑在异步线程，TPS 读的是 Paper 服务端缓存的
  * 读数、内存读 {@link Runtime}、在线人数由进出服事件计数器维护——主线程即使已经卡死，
  * 采样器也依然能记录下当时的 TPS，这正是排查卡顿需要的数据。</p>
+ *
+ * <p>Paper 的 {@code ServerTickStartEvent}/{@code ServerTickEndEvent} 提供逐 Tick 耗时；
+ * 卡顿段结束时再关联 JVM GC 通知、主线程低频堆栈采样与可选的 Spark 公共健康指标，
+ * 形成一条带证据的结构化诊断事件。</p>
  *
  * <p><b>事件只入队不落盘</b>：事件可能在主线程（监听器）或异步线程（采样）产生，
  * 记录只往内存队列里塞，由定时任务批量异步写存储（与 {@code EconomyLedger} 同一套
@@ -56,10 +68,18 @@ public class MonitorService {
 
     private final EssentialEngine plugin;
 
-    private MonitorConfig config;
+    private volatile MonitorConfig config;
+    private final SparkIntegration sparkIntegration;
 
     /** 内存里保留的最近采样（环形缓冲，头部是最旧的），status / 面板快速查询用。 */
     private final Deque<PerfSample> recentSamples = new ArrayDeque<>();
+    /** 主线程堆栈采样环形缓冲，只在卡顿事件结束时抽取对应时间段。 */
+    private final Deque<StackSample> threadStackSamples = new ArrayDeque<>();
+    /** GC 通知环形缓冲，不把每次 GC 都单独写成事件，避免产生噪声。 */
+    private final Deque<GcEvent> gcEvents = new ArrayDeque<>();
+    private final List<NotificationEmitter> gcEmitters = new ArrayList<>();
+    private final NotificationListener gcListener = this::onGcNotification;
+    private final Object lagLock = new Object();
     private final ConcurrentLinkedQueue<MonitorEvent> pendingEvents = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<PerfSample> pendingSamples = new ConcurrentLinkedQueue<>();
     private final AtomicInteger pendingEventCount = new AtomicInteger();
@@ -77,16 +97,29 @@ public class MonitorService {
     private final AtomicLong lastLagEvent = new AtomicLong();
     /** 上一次内存告警事件的时间，用于去重。 */
     private final AtomicLong lastMemoryEvent = new AtomicLong();
-    /** 卡顿是否处于未恢复状态（用于 TPS 恢复时补记 lag_recovered）。 */
-    private volatile boolean lagActive;
+
+    /** 由 Paper ServerTickStart/EndEvent 提供的当前 Tick 起点，用于关联堆栈采样。 */
+    private volatile long tickStartNanos;
+    private volatile long tickStartWallMillis;
+    private volatile int tickStartNumber = -1;
+    private volatile boolean tickHookSeen;
+    private volatile Thread monitoredThread;
+    private volatile double lastTickDurationMs = -1;
+    private volatile double maxTickDurationMs;
+    private volatile int lastTickNumber = -1;
+    /** 当前正在汇总的卡顿段；所有访问都经过 lagLock。 */
+    private LagEpisode lagEpisode;
 
     private Object sampleHandle;
     private Object flushHandle;
     private Object pruneHandle;
+    private Object stackSampleHandle;
+    private Object sparkLoadHandle;
 
     public MonitorService(EssentialEngine plugin, MonitorConfig config) {
         this.plugin = plugin;
         this.config = config;
+        this.sparkIntegration = new SparkIntegration(plugin);
     }
 
     public boolean isRunning() {
@@ -107,6 +140,8 @@ public class MonitorService {
      * 在本次启动时补记一条 {@link #EVENT_ABNORMAL_SHUTDOWN}。</p>
      */
     public void start() {
+        monitoredThread = Thread.currentThread();
+        startGcMonitor();
         long now = System.currentTimeMillis();
         SessionState state = loadState();
         if (config.recordStartStop()) {
@@ -128,6 +163,7 @@ public class MonitorService {
         onlineCount.set(Math.max(0, MainThread.call(plugin, () -> Bukkit.getOnlinePlayers().size(), 0)));
 
         startTimers();
+        startSparkIntegration();
     }
 
     /**
@@ -138,7 +174,9 @@ public class MonitorService {
     public void restart(MonitorConfig newConfig) {
         this.config = newConfig;
         stopTimers();
+        startGcMonitor();
         startTimers();
+        startSparkIntegration();
     }
 
     /**
@@ -150,6 +188,8 @@ public class MonitorService {
      */
     public void stop(boolean serverStopping) {
         stopTimers();
+        finishLagIncident(serverStopping ? "server_stop" : "reload", false,
+                System.currentTimeMillis(), System.nanoTime(), lastTickNumber);
         if (config.recordStartStop()) {
             if (serverStopping) {
                 recordEvent(EVENT_SERVER_STOP, "服务器关闭", Map.of("uptimeMs", uptimeMs()));
@@ -159,15 +199,20 @@ public class MonitorService {
         }
         saveState(new SessionState(startTime.get(), true));
         flush();
+        stopGcMonitor();
     }
 
     private void stopTimers() {
         SchedulerCompat.cancel(sampleHandle);
         SchedulerCompat.cancel(flushHandle);
         SchedulerCompat.cancel(pruneHandle);
+        SchedulerCompat.cancel(stackSampleHandle);
+        SchedulerCompat.cancel(sparkLoadHandle);
         sampleHandle = null;
         flushHandle = null;
         pruneHandle = null;
+        stackSampleHandle = null;
+        sparkLoadHandle = null;
     }
 
     private void startTimers() {
@@ -177,6 +222,33 @@ public class MonitorService {
         flushHandle = SchedulerCompat.runTimerAsync(plugin, this::flush, flush, flush);
         long hour = 20L * 60 * 60;
         pruneHandle = SchedulerCompat.runTimerAsync(plugin, this::prune, hour, hour);
+        if (config.captureThreadStacks() && !SchedulerCompat.isFolia()) {
+            long stackTicks = Math.max(1L, (config.threadStackSampleIntervalMs() + 49L) / 50L);
+            stackSampleHandle = SchedulerCompat.runTimerAsync(plugin, this::sampleMainThreadStack,
+                    stackTicks, stackTicks);
+        }
+    }
+
+    /** Paper 默认可能在服务器启动完成后才启用内置 Spark，因此这里允许延迟重试。 */
+    private void startSparkIntegration() {
+        if (!config.integrateSpark()) {
+            return;
+        }
+        sparkIntegration.tryLoad();
+        if (!sparkIntegration.isAvailable()) {
+            sparkLoadHandle = SchedulerCompat.runTimer(plugin, this::tryLoadSpark,
+                    20L, 100L);
+        }
+        SchedulerCompat.runAsync(plugin, sparkIntegration::refresh);
+    }
+
+    private void tryLoadSpark() {
+        sparkIntegration.tryLoad();
+        if (sparkIntegration.isAvailable()) {
+            SchedulerCompat.cancel(sparkLoadHandle);
+            sparkLoadHandle = null;
+            SchedulerCompat.runAsync(plugin, sparkIntegration::refresh);
+        }
     }
 
     // ------------------------------------------------------------------ 采样与告警
@@ -184,6 +256,9 @@ public class MonitorService {
     /** 采集一次性能采样，并按阈值产生卡顿 / 内存告警事件。在异步线程运行。 */
     private void sample() {
         double tps = readTps();
+        if (config.integrateSpark()) {
+            sparkIntegration.refresh();
+        }
         Runtime runtime = Runtime.getRuntime();
         long usedMB = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024;
         long maxMB = runtime.maxMemory() / 1024 / 1024;
@@ -204,30 +279,113 @@ public class MonitorService {
     }
 
     /**
-     * 卡顿检测：TPS 跌破阈值记 {@code lag}，恢复回阈值 + 2 记 {@code lag_recovered}。
-     * 同一次卡顿用冷却时间去重，避免 TPS 在阈值附近抖动时刷屏。
+     * 由 Paper 的 Tick 事件提供逐 Tick 耗时。监听器只更新有界的内存状态，
+     * 在卡顿段边界入队一条摘要；不查询世界、实体，也不执行 IO。
+     */
+    public void tickStarted(int tickNumber) {
+        tickHookSeen = true;
+        tickStartNumber = tickNumber;
+        tickStartNanos = System.nanoTime();
+        tickStartWallMillis = System.currentTimeMillis();
+    }
+
+    public void tickEnded(int tickNumber, double tickDurationMs) {
+        tickHookSeen = true;
+        lastTickNumber = tickNumber;
+        if (Double.isFinite(tickDurationMs) && tickDurationMs >= 0) {
+            lastTickDurationMs = tickDurationMs;
+            maxTickDurationMs = Math.max(maxTickDurationMs, tickDurationMs);
+        }
+        if (!config.recordLag() || !Double.isFinite(tickDurationMs) || tickDurationMs < 0) {
+            return;
+        }
+
+        long endNanos = System.nanoTime();
+        long startNanos = tickStartNumber == tickNumber && tickStartNanos > 0
+                ? tickStartNanos : endNanos - (long) (tickDurationMs * 1_000_000D);
+        long startWallMillis = tickStartNumber == tickNumber && tickStartWallMillis > 0
+                ? tickStartWallMillis
+                : System.currentTimeMillis() - Math.round(tickDurationMs);
+        Map<String, Object> startData = null;
+        LagEpisode completed = null;
+        long completedAt = System.currentTimeMillis();
+        long completedNanos = endNanos;
+
+        synchronized (lagLock) {
+            if (tickDurationMs >= config.lagTickThresholdMs()) {
+                if (lagEpisode == null && canStartLagIncident(completedAt)) {
+                    lagEpisode = new LagEpisode(
+                            incidentId(startNanos, tickNumber), startWallMillis, startNanos,
+                            tickNumber, "slow_tick");
+                    startData = lagStartData(lagEpisode, tickDurationMs, -1,
+                            tickNumber, "slow_tick");
+                }
+                if (lagEpisode != null) {
+                    lagEpisode.observeTick(tickDurationMs, true);
+                    lagEpisode.normalTicks = 0;
+                }
+            } else if (lagEpisode != null) {
+                lagEpisode.observeTick(tickDurationMs, false);
+                lagEpisode.normalTicks++;
+                if (lagEpisode.normalTicks >= config.lagRecoveryTicks()) {
+                    completed = lagEpisode;
+                    lagEpisode = null;
+                }
+            }
+        }
+
+        if (startData != null) {
+            recordEvent(EVENT_LAG,
+                    "检测到慢 Tick：" + String.format("%.1f", tickDurationMs) + "ms",
+                    startData);
+            plugin.getLogger().warning("[Monitor] 检测到慢 Tick："
+                    + String.format("%.1f", tickDurationMs) + "ms");
+        }
+        if (completed != null) {
+            recordLagCompletion(completed, true, "normal_ticks", completedAt, completedNanos, tickNumber);
+        }
+    }
+
+    /**
+     * TPS 采样是逐 Tick 监控的补充：它能发现短暂没有收到 Tick 事件的情况，
+     * 也能在 Paper 缓存的 TPS 跌破阈值时开始记录一次事件段。
      */
     private void checkLag(double tps, int online, long usedMB, long maxMB) {
         if (!config.recordLag() || tps <= 0) {
             return;
         }
         long now = System.currentTimeMillis();
-        if (!lagActive && tps < config.lagThresholdTps()) {
-            long cooldown = Math.max(10, config.lagCooldownSeconds()) * 1000L;
-            if (now - lastLagEvent.get() >= cooldown && lastLagEvent.compareAndSet(lastLagEvent.get(), now)) {
-                recordEvent(EVENT_LAG,
-                        "TPS 跌至 " + String.format("%.1f", tps)
-                                + "（阈值 " + String.format("%.1f", config.lagThresholdTps()) + "）",
-                        Map.of("tps", tps, "threshold", config.lagThresholdTps(),
-                                "online", online, "usedMB", usedMB, "maxMB", maxMB));
-                plugin.getLogger().warning("[Monitor] 检测到严重卡顿：TPS " + String.format("%.1f", tps));
+        Map<String, Object> startData = null;
+        LagEpisode completed = null;
+        long completedNanos = System.nanoTime();
+
+        synchronized (lagLock) {
+            if (tps < config.lagThresholdTps()) {
+                if (lagEpisode == null && canStartLagIncident(now)) {
+                    lagEpisode = new LagEpisode(
+                            incidentId(completedNanos, -1), now, completedNanos,
+                            -1, "low_tps");
+                    startData = lagStartData(lagEpisode, -1, tps, -1, "low_tps");
+                }
+                if (lagEpisode != null) {
+                    lagEpisode.observeTps(tps);
+                }
+            } else if (!tickHookSeen && lagEpisode != null
+                    && tps >= config.lagThresholdTps() + 2) {
+                completed = lagEpisode;
+                lagEpisode = null;
             }
-            lagActive = true;
-        } else if (lagActive && tps >= config.lagThresholdTps() + 2) {
-            lagActive = false;
-            recordEvent(EVENT_LAG_RECOVERED,
-                    "TPS 恢复至 " + String.format("%.1f", tps),
-                    Map.of("tps", tps));
+        }
+
+        if (startData != null) {
+            recordEvent(EVENT_LAG,
+                    "TPS 跌至 " + String.format("%.1f", tps)
+                            + "（阈值 " + String.format("%.1f", config.lagThresholdTps()) + "）",
+                    startData);
+            plugin.getLogger().warning("[Monitor] 检测到严重卡顿：TPS " + String.format("%.1f", tps));
+        }
+        if (completed != null) {
+            recordLagCompletion(completed, true, "tps_recovered", now, completedNanos, -1);
             plugin.getLogger().info("[Monitor] 卡顿已恢复：TPS " + String.format("%.1f", tps));
         }
     }
@@ -250,6 +408,377 @@ public class MonitorService {
                 plugin.getLogger().warning("[Monitor] 内存占用过高：" + usedMB + "MB / " + maxMB + "MB");
             }
         }
+    }
+
+    /** 开始监听 JVM 的 GC 通知；只保留内存中的小窗口，等卡顿结束时再关联。 */
+    private void startGcMonitor() {
+        if (!config.recordLag()) {
+            stopGcMonitor();
+            return;
+        }
+        if (!gcEmitters.isEmpty()) {
+            return;
+        }
+        for (GarbageCollectorMXBean bean : ManagementFactory.getGarbageCollectorMXBeans()) {
+            if (!(bean instanceof NotificationEmitter emitter)) {
+                continue;
+            }
+            try {
+                emitter.addNotificationListener(gcListener, null, bean.getName());
+                gcEmitters.add(emitter);
+            } catch (Exception error) {
+                plugin.getLogger().fine("[Monitor] 无法监听 GC：" + bean.getName());
+            }
+        }
+    }
+
+    private void stopGcMonitor() {
+        for (NotificationEmitter emitter : gcEmitters) {
+            try {
+                emitter.removeNotificationListener(gcListener);
+            } catch (Exception ignored) {
+                // JVM 正在退出或监听器已经被移除
+            }
+        }
+        gcEmitters.clear();
+    }
+
+    private void onGcNotification(Notification notification, Object handback) {
+        if (!GarbageCollectionNotificationInfo.GARBAGE_COLLECTION_NOTIFICATION
+                .equals(notification.getType())) {
+            return;
+        }
+        Object userData = notification.getUserData();
+        if (!(userData instanceof CompositeData composite)) {
+            return;
+        }
+        try {
+            GarbageCollectionNotificationInfo info = GarbageCollectionNotificationInfo.from(composite);
+            long nowNanos = System.nanoTime();
+            GcEvent event = new GcEvent(nowNanos, System.currentTimeMillis(),
+                    Math.max(0, info.getGcInfo().getDuration()),
+                    info.getGcName(), info.getGcAction(), info.getGcCause());
+            synchronized (gcEvents) {
+                gcEvents.addLast(event);
+                while (gcEvents.size() > 256) {
+                    gcEvents.pollFirst();
+                }
+            }
+        } catch (Exception ignored) {
+            // 不让单次格式异常影响服务器的 GC 线程
+        }
+    }
+
+    /**
+     * 按 Spark 的思路在后台对主线程做低频采样。采样永远只进环形缓冲，
+     * 不在主线程执行，也不为每一次采样写磁盘。
+     */
+    private void sampleMainThreadStack() {
+        if (!config.captureThreadStacks() || SchedulerCompat.isFolia()) {
+            return;
+        }
+        Thread thread = monitoredThread;
+        if (thread == null || !thread.isAlive()) {
+            return;
+        }
+        try {
+            long capturedNanos = System.nanoTime();
+            StackTraceElement[] trace = thread.getStackTrace();
+            if (trace.length == 0) {
+                return;
+            }
+            int depth = Math.min(config.threadStackDepth(), trace.length);
+            List<String> frames = new ArrayList<>(depth);
+            for (int i = 0; i < depth; i++) {
+                frames.add(trace[i].toString());
+            }
+            StackSample sample = new StackSample(capturedNanos, System.currentTimeMillis(), frames);
+            synchronized (threadStackSamples) {
+                threadStackSamples.addLast(sample);
+                while (threadStackSamples.size() > 512) {
+                    threadStackSamples.pollFirst();
+                }
+            }
+        } catch (SecurityException ignored) {
+            // 安全策略禁止读取线程堆栈时，其他指标仍然正常工作
+        }
+    }
+
+    private boolean canStartLagIncident(long now) {
+        long cooldown = Math.max(10, config.lagCooldownSeconds()) * 1000L;
+        long last = lastLagEvent.get();
+        if (last > 0 && now - last < cooldown) {
+            return false;
+        }
+        lastLagEvent.set(now);
+        return true;
+    }
+
+    private static String incidentId(long startNanos, int tickNumber) {
+        return Long.toUnsignedString(startNanos, 36) + "-" + tickNumber;
+    }
+
+    private Map<String, Object> lagStartData(LagEpisode episode, double tickDurationMs,
+                                             double tps, int tickNumber, String trigger) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("incidentId", episode.id);
+        data.put("phase", "start");
+        data.put("trigger", trigger);
+        data.put("startedAt", episode.startTimestamp);
+        data.put("tickNumber", tickNumber);
+        data.put("tickThresholdMs", config.lagTickThresholdMs());
+        data.put("tpsThreshold", config.lagThresholdTps());
+        if (Double.isFinite(tickDurationMs) && tickDurationMs >= 0) {
+            data.put("tickDurationMs", tickDurationMs);
+        }
+        if (Double.isFinite(tps) && tps > 0) {
+            data.put("tps", tps);
+        }
+        data.put("online", Math.max(0, onlineCount.get()));
+        Runtime runtime = Runtime.getRuntime();
+        data.put("usedMB", (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024);
+        data.put("maxMB", runtime.maxMemory() / 1024 / 1024);
+        if (config.integrateSpark()) {
+            data.put("spark", sparkIntegration.snapshot());
+        }
+        return data;
+    }
+
+    private void finishLagIncident(String reason, boolean recovered, long endTimestamp,
+                                   long endNanos, int endTick) {
+        LagEpisode completed;
+        synchronized (lagLock) {
+            if (lagEpisode == null) {
+                return;
+            }
+            completed = lagEpisode;
+            lagEpisode = null;
+        }
+        recordLagCompletion(completed, recovered, reason, endTimestamp, endNanos, endTick);
+    }
+
+    private void recordLagCompletion(LagEpisode episode, boolean recovered, String reason,
+                                     long endTimestamp, long endNanos, int endTick) {
+        long durationMs = Math.max(0, Math.round((endNanos - episode.startNanos) / 1_000_000D));
+        Map<String, Object> gc = gcSummary(episode.startNanos, endNanos);
+        Map<String, Object> stacks = stackSummary(episode.startNanos, endNanos);
+        Map<String, Object> spark = config.integrateSpark()
+                ? sparkIntegration.snapshot() : Map.of("available", false);
+        Map<String, Object> diagnosis = diagnose(episode, gc, stacks, spark);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("incidentId", episode.id);
+        data.put("phase", "end");
+        data.put("recovered", recovered);
+        data.put("closeReason", reason);
+        data.put("trigger", episode.trigger);
+        data.put("startedAt", episode.startTimestamp);
+        data.put("endedAt", endTimestamp);
+        data.put("durationMs", durationMs);
+        data.put("startTick", episode.startTick);
+        data.put("endTick", endTick);
+        data.put("observedTicks", episode.observedTicks);
+        data.put("slowTicks", episode.slowTicks);
+        data.put("minTps", episode.minTps);
+        data.put("minTickDurationMs", finiteOrZero(episode.minTickDurationMs));
+        data.put("maxTickDurationMs", episode.maxTickDurationMs);
+        data.put("averageTickDurationMs", episode.observedTicks == 0
+                ? 0 : episode.totalTickDurationMs / episode.observedTicks);
+        data.put("tpsSamples", episode.tpsSamples);
+        data.put("tickThresholdMs", config.lagTickThresholdMs());
+        data.put("tpsThreshold", config.lagThresholdTps());
+        data.put("online", Math.max(0, onlineCount.get()));
+        data.put("gc", gc);
+        data.put("gcPauseMs", gc.get("totalPauseMs"));
+        data.put("mainThread", stacks);
+        data.put("diagnosis", diagnosis);
+        data.put("suspectedCause", diagnosis.get("suspectedCause"));
+        data.put("confidence", diagnosis.get("confidence"));
+        data.put("spark", spark);
+        if (Boolean.TRUE.equals(spark.get("available"))) {
+            data.put("sparkProfilerHint", "/spark profiler start --only-ticks-over "
+                    + Math.max(50, Math.round(config.lagTickThresholdMs()))
+                    + " --timeout 30");
+        }
+
+        String cause = String.valueOf(diagnosis.get("suspectedCause"));
+        String message = recovered
+                ? "卡顿已恢复：持续 " + formatMs(durationMs) + "，最高 Tick "
+                + String.format("%.1f", episode.maxTickDurationMs) + "ms，疑似 " + cause
+                : "卡顿记录结束（" + reason + "）：持续 " + formatMs(durationMs)
+                + "，疑似 " + cause;
+        recordEvent(EVENT_LAG_RECOVERED, message, data);
+    }
+
+    private Map<String, Object> gcSummary(long startNanos, long endNanos) {
+        List<GcEvent> selected = new ArrayList<>();
+        synchronized (gcEvents) {
+            for (GcEvent event : gcEvents) {
+                if (event.timestampNanos >= startNanos && event.timestampNanos <= endNanos) {
+                    selected.add(event);
+                }
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        long total = selected.stream().mapToLong(event -> event.durationMs).sum();
+        long max = selected.stream().mapToLong(event -> event.durationMs).max().orElse(0);
+        result.put("count", selected.size());
+        result.put("totalPauseMs", total);
+        result.put("maxPauseMs", max);
+        List<Map<String, Object>> details = new ArrayList<>();
+        for (GcEvent event : selected) {
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("timestamp", event.timestampMillis);
+            detail.put("durationMs", event.durationMs);
+            detail.put("name", event.name);
+            detail.put("action", event.action);
+            detail.put("cause", event.cause);
+            details.add(detail);
+        }
+        result.put("events", details);
+        return result;
+    }
+
+    private Map<String, Object> stackSummary(long startNanos, long endNanos) {
+        List<StackSample> selected = new ArrayList<>();
+        synchronized (threadStackSamples) {
+            for (StackSample sample : threadStackSamples) {
+                if (sample.timestampNanos >= startNanos && sample.timestampNanos <= endNanos) {
+                    selected.add(sample);
+                }
+            }
+            if (selected.isEmpty()) {
+                StackSample nearest = null;
+                for (StackSample sample : threadStackSamples) {
+                    if (sample.timestampNanos <= endNanos
+                            && endNanos - sample.timestampNanos <= 1_000_000_000L) {
+                        nearest = sample;
+                    }
+                }
+                if (nearest != null) {
+                    selected.add(nearest);
+                }
+            }
+        }
+
+        Map<String, Integer> frameCounts = new LinkedHashMap<>();
+        for (StackSample sample : selected) {
+            for (String frame : sample.frames) {
+                frameCounts.merge(frame, 1, Integer::sum);
+            }
+        }
+        List<String> dominantFrames = frameCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder()))
+                .limit(12)
+                .map(entry -> entry.getKey() + " ×" + entry.getValue())
+                .toList();
+
+        List<Map<String, Object>> samples = new ArrayList<>();
+        int sampleLimit = Math.min(8, selected.size());
+        for (int i = 0; i < sampleLimit; i++) {
+            int index = sampleLimit == 1 ? 0
+                    : (int) Math.round(i * (selected.size() - 1D) / (sampleLimit - 1D));
+            StackSample sample = selected.get(index);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("timestamp", sample.timestampMillis);
+            item.put("frames", sample.frames);
+            samples.add(item);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("sampleCount", selected.size());
+        result.put("dominantFrames", dominantFrames);
+        result.put("samples", samples);
+        return result;
+    }
+
+    private Map<String, Object> diagnose(LagEpisode episode, Map<String, Object> gc,
+                                         Map<String, Object> stacks, Map<String, Object> spark) {
+        List<String> evidence = new ArrayList<>();
+        String cause = "unknown";
+        double confidence = 0.15;
+
+        long gcPause = numberLong(gc.get("totalPauseMs"));
+        if (gcPause >= Math.max(50, Math.round(episode.maxTickDurationMs * 0.25))) {
+            cause = "gc_pause";
+            confidence = 0.85;
+            evidence.add("卡顿时间段内检测到 " + gc.get("count") + " 次 GC，共暂停 "
+                    + gcPause + "ms");
+        } else {
+            String blockingFrame = findFrame(stacks, "wait(", "park(", "sleep(",
+                    "futuretask.get", "completablefuture.join", "java.sql.", "jdbc",
+                    "files.", "socket", "urlconnection", "httpclient");
+            if (blockingFrame != null) {
+                cause = "main_thread_blocking";
+                confidence = 0.70;
+                evidence.add("主线程采样出现阻塞或 IO 调用：" + blockingFrame);
+            } else {
+                String worldFrame = findFrame(stacks, "worldgen", "chunk", "pathfinding");
+                if (worldFrame != null) {
+                    cause = "world_or_chunk_work";
+                    confidence = 0.60;
+                    evidence.add("主线程采样集中在区块 / 世界计算：" + worldFrame);
+                } else {
+                    String entityFrame = findFrame(stacks,
+                            "entity.entity.tick", "entity.tick", "ticknonpassenger");
+                    if (entityFrame != null) {
+                        cause = "entity_tick_work";
+                        confidence = 0.55;
+                        evidence.add("主线程采样集中在实体 Tick：" + entityFrame);
+                    }
+                }
+            }
+        }
+
+        Object cpu = spark.get("cpuProcess10s");
+        if ("unknown".equals(cause) && cpu instanceof Number number
+                && number.doubleValue() >= 90) {
+            cause = "cpu_pressure";
+            confidence = 0.55;
+            evidence.add("Spark 进程 CPU 约 " + String.format("%.1f", number.doubleValue()) + "%");
+        }
+        if (episode.maxTickDurationMs >= config.lagTickThresholdMs()) {
+            evidence.add("最大 Tick 耗时 " + String.format("%.1f", episode.maxTickDurationMs) + "ms");
+        }
+        if ("unknown".equals(cause)) {
+            evidence.add("当前采样不足以确认具体调用方，需要 Spark profiler 火焰图");
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("suspectedCause", cause);
+        result.put("confidence", Math.round(confidence * 100) / 100.0);
+        result.put("method", "heuristic");
+        result.put("evidence", evidence);
+        return result;
+    }
+
+    private String findFrame(Map<String, Object> stacks, String... needles) {
+        Object value = stacks.get("dominantFrames");
+        if (!(value instanceof List<?> frames)) {
+            return null;
+        }
+        for (Object frame : frames) {
+            String text = String.valueOf(frame);
+            String lower = text.toLowerCase(java.util.Locale.ROOT);
+            for (String needle : needles) {
+                if (lower.contains(needle.toLowerCase(java.util.Locale.ROOT))) {
+                    return text;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static long numberLong(Object value) {
+        return value instanceof Number number ? number.longValue() : 0;
+    }
+
+    private static double finiteOrZero(double value) {
+        return Double.isFinite(value) ? value : 0;
+    }
+
+    private static String formatMs(long milliseconds) {
+        return String.format("%.1f秒", milliseconds / 1000.0);
     }
 
     /** 读 TPS。Paper 上这是服务端缓存的读数，任何线程都能安全读取。 */
@@ -362,6 +891,61 @@ public class MonitorService {
 
     // ------------------------------------------------------------------ 会话状态
 
+    /** 一段卡顿从开始到恢复之间的轻量汇总状态。只在 lagLock 内修改。 */
+    private static final class LagEpisode {
+
+        private final String id;
+        private final long startTimestamp;
+        private final long startNanos;
+        private final int startTick;
+        private final String trigger;
+        private double minTps = -1;
+        private int tpsSamples;
+        private double minTickDurationMs = Double.POSITIVE_INFINITY;
+        private double maxTickDurationMs;
+        private double totalTickDurationMs;
+        private long observedTicks;
+        private long slowTicks;
+        private int normalTicks;
+
+        private LagEpisode(String id, long startTimestamp, long startNanos,
+                           int startTick, String trigger) {
+            this.id = id;
+            this.startTimestamp = startTimestamp;
+            this.startNanos = startNanos;
+            this.startTick = startTick;
+            this.trigger = trigger;
+        }
+
+        private void observeTick(double durationMs, boolean slow) {
+            if (!Double.isFinite(durationMs) || durationMs < 0) {
+                return;
+            }
+            observedTicks++;
+            totalTickDurationMs += durationMs;
+            minTickDurationMs = Math.min(minTickDurationMs, durationMs);
+            maxTickDurationMs = Math.max(maxTickDurationMs, durationMs);
+            if (slow) {
+                slowTicks++;
+            }
+        }
+
+        private void observeTps(double tps) {
+            if (!Double.isFinite(tps) || tps <= 0) {
+                return;
+            }
+            tpsSamples++;
+            minTps = minTps < 0 ? tps : Math.min(minTps, tps);
+        }
+    }
+
+    private record StackSample(long timestampNanos, long timestampMillis, List<String> frames) {
+    }
+
+    private record GcEvent(long timestampNanos, long timestampMillis, long durationMs,
+                           String name, String action, String cause) {
+    }
+
     private record SessionState(long lastStart, boolean stopRecorded) {
     }
 
@@ -427,6 +1011,24 @@ public class MonitorService {
         memory.put("usedMB", (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024);
         result.put("memory", memory);
 
+        Map<String, Object> tick = new LinkedHashMap<>();
+        tick.put("supported", tickHookSeen);
+        tick.put("lastNumber", lastTickNumber);
+        tick.put("lastDurationMs", round1(lastTickDurationMs));
+        tick.put("maxDurationMs", round1(maxTickDurationMs));
+        tick.put("thresholdMs", config.lagTickThresholdMs());
+        synchronized (lagLock) {
+            tick.put("lagActive", lagEpisode != null);
+            if (lagEpisode != null) {
+                tick.put("incidentId", lagEpisode.id);
+                tick.put("incidentStartedAt", lagEpisode.startTimestamp);
+                tick.put("trigger", lagEpisode.trigger);
+            }
+        }
+        result.put("tick", tick);
+        result.put("spark", config.integrateSpark()
+                ? sparkIntegration.snapshot() : Map.of("available", false));
+
         Map<String, Long> counters = new LinkedHashMap<>();
         eventCounters.forEach((type, count) -> counters.put(type, count.get()));
         result.put("counters", counters);
@@ -441,6 +1043,12 @@ public class MonitorService {
         Map<String, Object> settings = new LinkedHashMap<>();
         settings.put("sampleIntervalSeconds", config.sampleIntervalSeconds());
         settings.put("lagThresholdTps", config.lagThresholdTps());
+        settings.put("lagTickThresholdMs", config.lagTickThresholdMs());
+        settings.put("lagRecoveryTicks", config.lagRecoveryTicks());
+        settings.put("captureThreadStacks", config.captureThreadStacks());
+        settings.put("threadStackSampleIntervalMs", config.threadStackSampleIntervalMs());
+        settings.put("threadStackDepth", config.threadStackDepth());
+        settings.put("integrateSpark", config.integrateSpark());
         settings.put("memoryWarningPercent", config.memoryWarningPercent());
         settings.put("recordLag", config.recordLag());
         settings.put("recordMemory", config.recordMemory());

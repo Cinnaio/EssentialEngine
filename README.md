@@ -247,8 +247,8 @@ modules:
 
 ## 性能监控与 AstrBot 预留接口
 
-`modules.monitor` 默认开启：定时采样 **TPS / 内存 / 在线人数**，并自动记录
-**性能相关事件**与**服务器启停事件**，数据跟随 `storage.type` 持久化
+`modules.monitor` 默认开启：定时采样 **TPS / 内存 / 在线人数**，在 Paper 上额外记录逐 Tick
+耗时，并自动记录 **性能相关事件**与**服务器启停事件**，数据跟随 `storage.type` 持久化
 （YAML 后端写成 `data/monitor_events.jsonl` / `monitor_samples.jsonl`，
 SQLite / MySQL 建 `ee_monitor_events` / `ee_monitor_samples` 表）。
 
@@ -256,16 +256,36 @@ SQLite / MySQL 建 `ee_monitor_events` / `ee_monitor_samples` 表）。
 
 | 事件类型 | 触发条件 |
 | --- | --- |
-| `lag` | TPS 跌破阈值（默认 15），去重间隔 60 秒 |
-| `lag_recovered` | TPS 恢复到「阈值 + 2」以上 |
+| `lag` | 单个 Tick 超过阈值（默认 100ms），或异步 TPS 采样跌破阈值（默认 15） |
+| `lag_recovered` | 连续恢复正常 Tick 后结束一段卡顿，并写入持续时间、慢 Tick 数、GC、主线程热点与疑似原因 |
 | `memory_high` | 已用内存占比超过阈值（默认 90%），去重间隔 5 分钟 |
 | `server_start` | 插件随服务器启动 |
 | `server_stop` | 服务器正常关闭 |
 | `reload` | `/ee reload` 或插件被重载 |
 | `abnormal_shutdown` | **下次启动时补记**：上次会话没走完关服流程（崩溃 / 强杀） |
 
-采样与事件都先入内存队列、由定时任务批量异步落盘，**不会阻塞主线程**——
-即使主线程已经卡死，采样器依然能记录下当时的 TPS，这正是排查卡顿需要的数据。
+`lag` 只记录一次卡顿段的开始，`lag_recovered` 记录汇总结果；不会为每个慢 Tick 刷一条日志。
+卡顿期间的主线程堆栈在异步线程低频采样，JVM GC 通知也只保留一个小窗口，结束时再关联，
+因此不会执行完整线程转储，也不会把每次采样写盘。采样与事件都先入内存队列、由定时任务批量
+异步落盘，**不会阻塞主线程**——即使主线程已经卡死，异步采样器依然能记录当时的 TPS。
+
+### 卡顿事件能说明什么
+
+`lag_recovered.data` 是结构化诊断结果，常用字段包括：
+
+- `durationMs`、`startTick`、`endTick`、`observedTicks`、`slowTicks`：卡顿段的时间与 Tick 统计；
+- `minTps`、`minTickDurationMs`、`maxTickDurationMs`、`averageTickDurationMs`：实际观测到的性能边界；
+- `gc` / `gcPauseMs`：卡顿时间段内的 GC 次数、总暂停、最长暂停及收集器信息；
+- `mainThread.dominantFrames` / `mainThread.samples`：主线程堆栈热点采样；
+- `diagnosis.suspectedCause`、`diagnosis.confidence`、`diagnosis.evidence`：基于上述信号的启发式判断，
+  可能为 `gc_pause`、`main_thread_blocking`、`world_or_chunk_work`、`entity_tick_work`、
+  `cpu_pressure` 或 `unknown`；
+- `spark`：Spark 可用且开启集成时的公开健康指标。若仍需确认具体插件，可使用事件里的
+  `sparkProfilerHint` 执行 Spark 自己的 Tick 超时 profiler，火焰图再按插件 / 模组聚合。
+
+这套诊断会给出“最可能的方向”和证据，不会把启发式结果冒充精确根因；`unknown` 时应继续用
+Spark profiler 或 Spark viewer 做完整调用树分析。Folia 没有单一全局 Tick 线程，因此会自动停用
+主线程堆栈采样，但保留 TPS、内存、GC 与可用的 Spark 指标。
 
 ### 配置
 
@@ -278,6 +298,12 @@ modules:
     record-lag: true
     lag-threshold-tps: 15.0
     lag-cooldown-seconds: 60
+    lag-tick-threshold-ms: 100.0  # 单个 Tick 超过此值开始记录卡顿段
+    lag-recovery-ticks: 40         # 连续正常 Tick 数达到此值结束卡顿段
+    capture-thread-stacks: true    # 异步低频采样主线程堆栈（Folia 自动停用）
+    thread-stack-sample-interval-ms: 100
+    thread-stack-depth: 8
+    integrate-spark: true           # 读取可用 Spark 的公开健康指标（Paper 可能内置），可选
     record-memory: true
     memory-warning-percent: 90
     memory-cooldown-minutes: 5
@@ -290,8 +316,8 @@ modules:
 - **游戏内 / 控制台**：`/eemonitor [status|events|samples|sessions|record]`，
   权限 `essentialengine.command.eemonitor`（默认 OP）。
   `/eemonitor record <类型> <内容>` 可以手动记录一条自定义事件。
-- **网页管理面板**：开启 `panel` 模块后，「监控」页有 TPS / 内存曲线、
-  最近事件与会话记录（异常退出会标红）。
+- **网页管理面板**：开启 `panel` 模块后，「监控」页有 TPS / 内存曲线、逐 Tick 读数、
+  最近事件与卡顿诊断摘要、会话记录（异常退出会标红）。
 - **REST 接口**（为 AstrBot 等外部程序预留，见下）。
 
 ### AstrBot 预留接口
@@ -302,9 +328,9 @@ modules:
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/monitor/status` | 当前 TPS / 内存 / 在线 / 运行时长 / 本次运行事件计数 / 会话状态 |
+| GET | `/api/monitor/status` | 当前 TPS / 内存 / 在线 / Tick 读数 / Spark 状态 / 运行时长 / 本次运行事件计数 / 会话状态 |
 | GET | `/api/monitor/samples?minutes=30&limit=500` | 性能采样历史（正序，超出自动抽稀），含 `tps` `usedMB` `maxMB` `online` |
-| GET | `/api/monitor/events?limit=50&type=lag&since=<毫秒时间戳>` | 最近事件（倒序），可按类型过滤、按时间起点过滤 |
+| GET | `/api/monitor/events?limit=50&type=lag_recovered&since=<毫秒时间戳>` | 最近事件（倒序），可按类型过滤、按时间起点过滤；卡顿诊断在事件的 `data` 字段 |
 | GET | `/api/monitor/sessions?limit=20` | 启动 / 关闭配对记录，`abnormal` 标记异常退出，`running` 标记进行中 |
 | POST | `/api/monitor/events` | 写入自定义事件（需 `allow-custom-events`），请求体 `{"type":"...","message":"...","data":{...}}` |
 

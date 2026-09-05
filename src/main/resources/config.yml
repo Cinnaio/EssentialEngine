@@ -352,8 +352,8 @@ modules:
     cors-origin: ""
 
   # ---------------- 性能监控 ----------------
-  # 定时采样 TPS / 内存 / 在线人数，自动记录性能事件（严重卡顿、TPS 恢复、
-  # 内存占用过高、启动 / 关闭 / 重载、异常退出），数据跟随 storage.type 持久化。
+  # 定时采样 TPS / 内存 / 在线人数，并在 Paper 上按 Tick 记录卡顿事件段；
+  # 卡顿结束时会关联 GC 暂停与主线程堆栈采样，给出疑似原因，数据跟随 storage.type 持久化。
   # 查看方式：
   #   · 游戏内 / 控制台 /eemonitor
   #   · 网页管理面板的「监控」页（需开启 panel 模块）
@@ -375,6 +375,18 @@ modules:
     lag-threshold-tps: 15.0
     # 同一时段卡顿事件的去重间隔（秒），避免 TPS 在阈值附近抖动时刷屏
     lag-cooldown-seconds: 60
+    # 单个 Tick 超过多少毫秒判定为慢 Tick（100ms 约等于该 Tick 只有 10 TPS）
+    lag-tick-threshold-ms: 100.0
+    # 连续多少个正常 Tick 后结束一次卡顿事件段
+    lag-recovery-ticks: 40
+    # 是否在异步线程低频采样 Paper 主线程堆栈，卡顿结束时写入主线程热点摘要
+    # Folia 没有单一全局 Tick 线程，此项在 Folia 上会自动停用
+    capture-thread-stacks: true
+    # 主线程堆栈采样间隔（毫秒）与每次最多保留的堆栈层数
+    thread-stack-sample-interval-ms: 100
+    thread-stack-depth: 8
+    # 是否读取可用 Spark 的公开健康指标（Paper 可能内置 Spark，不可用时也能正常工作）
+    integrate-spark: true
     # 是否记录内存占用过高告警事件
     record-memory: true
     # 内存告警阈值：已用内存占比超过该百分比时告警

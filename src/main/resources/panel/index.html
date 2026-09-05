@@ -547,7 +547,7 @@ input:-webkit-autofill:focus{
 .mon-legend i.lg-mem{ background:#3B82C4; }
 .mon-legend i.lg-thr{ background:var(--danger); }
 #monChart{ width:100%; height:220px; display:block; }
-.evt{ display:flex; align-items:baseline; gap:10px; padding:10px 2px;
+.evt{ display:flex; align-items:flex-start; gap:10px; padding:10px 2px;
   box-shadow:inset 0 -1px 0 var(--line); }
 .evt:last-child{ box-shadow:none; }
 .evt .t{ flex:none; width:min(150px,26%); font-size:12px; color:var(--text-3);
@@ -558,8 +558,11 @@ input:-webkit-autofill:focus{
 .evt .type.memory_high{ color:var(--warn); }
 .evt .type.server_start, .evt .type.server_stop{ color:var(--text-2); }
 .evt .type.reload{ color:var(--warn); }
+.evt-body{ flex:1; min-width:0; }
 .evt .m{ flex:1; min-width:0; font-size:13px; color:var(--text);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.evt .detail{ margin-top:4px; font-size:11.5px; line-height:1.5; color:var(--text-3);
+  white-space:normal; overflow-wrap:anywhere; }
 .sess{ display:flex; align-items:baseline; gap:10px; padding:10px 2px;
   box-shadow:inset 0 -1px 0 var(--line); font-size:13px; }
 .sess:last-child{ box-shadow:none; }
@@ -1704,6 +1707,46 @@ function monDur(ms){
   if (h > 0) return h + "小时" + m + "分";
   return m + "分钟" + (s % 60) + "秒";
 }
+function monNumber(value, digits = 1){
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : "";
+}
+/** 把卡顿事件的结构化诊断压成一行摘要，完整字段仍保留在 REST /monitor/events。 */
+function monEventDetail(ev){
+  const data = ev && ev.data && typeof ev.data === "object" ? ev.data : {};
+  const parts = [];
+  const duration = Number(data.durationMs);
+  if (Number.isFinite(duration) && duration > 0) parts.push("持续 " + monNumber(duration / 1000) + "s");
+  const minTps = Number(data.minTps);
+  if (Number.isFinite(minTps) && minTps >= 0) parts.push("最低TPS " + monNumber(minTps));
+  const maxTick = Number(data.maxTickDurationMs);
+  if (Number.isFinite(maxTick) && maxTick > 0) parts.push("最高Tick " + monNumber(maxTick) + "ms");
+  const cause = data.suspectedCause || (data.diagnosis && data.diagnosis.suspectedCause);
+  if (cause) {
+    const causeNames = {
+      gc_pause: "GC暂停", main_thread_blocking: "主线程阻塞 / IO",
+      world_or_chunk_work: "世界 / 区块计算", entity_tick_work: "实体Tick",
+      cpu_pressure: "CPU压力", unknown: "暂未确定"
+    };
+    const confidence = Number(data.confidence);
+    const confidenceText = Number.isFinite(confidence) ? " " + Math.round(confidence * 100) + "%" : "";
+    parts.push("疑似 " + (causeNames[cause] || cause) + confidenceText);
+  }
+  const evidence = data.diagnosis && Array.isArray(data.diagnosis.evidence)
+    ? data.diagnosis.evidence : [];
+  if (evidence.length) parts.push(evidence[0]);
+  const gc = data.gc && typeof data.gc === "object" ? data.gc : {};
+  const gcPause = Number(data.gcPauseMs != null ? data.gcPauseMs : gc.totalPauseMs);
+  if (Number.isFinite(gcPause) && gcPause > 0) parts.push("GC暂停 " + monNumber(gcPause) + "ms");
+  const frames = data.mainThread && Array.isArray(data.mainThread.dominantFrames)
+    ? data.mainThread.dominantFrames : [];
+  if (frames.length) parts.push("热点 " + frames[0]);
+  const spark = data.spark && typeof data.spark === "object" ? data.spark : {};
+  const sparkMspt = spark.mspt10s && Number(spark.mspt10s.max);
+  if (spark.available && Number.isFinite(sparkMspt)) parts.push("Spark MSPT " + monNumber(sparkMspt) + "ms");
+  if (spark.available && data.sparkProfilerHint) parts.push("建议 " + data.sparkProfilerHint);
+  return parts.join(" · ");
+}
 
 /** 在 canvas 上画 TPS（左轴 0-20，绿）与内存占用百分比（右轴 0-100，蓝）双曲线。 */
 function drawMonChart(canvas, samples, threshold){
@@ -1776,24 +1819,36 @@ async function loadMonitor(){
   monErrorShown = false;
 
   const tps = d.tps || {}, mem = d.memory || {}, cfg = d.config || {};
+  const tick = d.tick || {}, spark = d.spark || {};
   const counters = d.counters || {};
   const totalEvents = Object.values(counters).reduce((a, b) => a + b, 0);
   const refreshText = monRefreshMs > 0
     ? "每 " + (monRefreshMs / 1000) + " 秒自动刷新" : "手动刷新";
+  const tickText = tick.supported
+    ? " · Tick阈值 " + (cfg.lagTickThresholdMs || 100) + "ms / 最高 " + monNumber(tick.maxDurationMs) + "ms"
+    : "";
+  const sparkText = spark.available ? " · Spark已接入" : "";
   $("#monLine").textContent = "采样间隔 " + (cfg.sampleIntervalSeconds || 10) + " 秒 · 卡顿阈值 TPS "
-    + (cfg.lagThresholdTps || 15) + " · " + refreshText + " · 本次运行已采样 " + (d.samples || 0) + " 条";
+    + (cfg.lagThresholdTps || 15) + tickText + sparkText + " · " + refreshText
+    + " · 本次运行已采样 " + (d.samples || 0) + " 条";
 
   const tiles = $("#monTiles");
   tiles.textContent = "";
   const tpsSub = tps["1m"] == null || tps["1m"] < 0 ? ""
     : "1m " + Number(tps["1m"]).toFixed(1) + " / 5m " + Number(tps["5m"]).toFixed(1)
       + " / 15m " + Number(tps["15m"]).toFixed(1);
+  const tickSub = tick.supported
+    ? (tick.lagActive ? "卡顿记录中 · " : "") + "最高 " + monNumber(tick.maxDurationMs) + "ms"
+    : "Paper Tick 事件未就绪";
   tiles.append(
     tile("TPS", tps.now == null || tps.now < 0 ? "—" : Number(tps.now).toFixed(1), tpsSub),
     tile("内存", mem.usedMB + " MB",
       "上限 " + mem.maxMB + " MB · " + Math.round(mem.usedMB / (mem.maxMB || 1) * 100) + "%"),
     tile("在线人数", String(d.online)),
     tile("运行时长", monDur(d.uptimeMs)),
+    tile("Tick", tick.supported && Number(tick.lastDurationMs) >= 0
+      ? monNumber(tick.lastDurationMs) + " ms" : "—",
+      tickSub),
     tile("本次事件", String(totalEvents),
       "卡顿 " + (counters.lag || 0) + " · 恢复 " + (counters.lag_recovered || 0)
       + " · 内存告警 " + (counters.memory_high || 0))
@@ -1813,7 +1868,15 @@ async function loadMonitor(){
       const type = document.createElement("span"); type.className = "type " + (ev.type || "");
       type.textContent = ev.type || "?";
       const m = document.createElement("span"); m.className = "m"; m.textContent = ev.message || "";
-      row.append(t, type, m);
+      const body = document.createElement("div"); body.className = "evt-body";
+      body.append(m);
+      const detailText = monEventDetail(ev);
+      if (detailText){
+        const detail = document.createElement("div"); detail.className = "detail";
+        detail.textContent = detailText;
+        body.append(detail);
+      }
+      row.append(t, type, body);
       evHost.append(row);
     });
   }

@@ -8,6 +8,8 @@ import com.github.cinnaio.essentialengine.core.scheduler.SchedulerCompat;
 import com.github.cinnaio.essentialengine.core.storage.MonitorEvent;
 import com.github.cinnaio.essentialengine.core.storage.PerfSample;
 import com.github.cinnaio.essentialengine.core.util.TimeUtil;
+import com.destroystokyo.paper.event.server.ServerTickEndEvent;
+import com.destroystokyo.paper.event.server.ServerTickStartEvent;
 import org.bukkit.command.CommandSender;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -52,6 +54,12 @@ public class MonitorModule extends EngineModule {
                 cfgBool("record-lag", true),
                 Math.max(1, cfgDouble("lag-threshold-tps", 15)),
                 Math.max(10, cfgInt("lag-cooldown-seconds", 60)),
+                Math.max(50, cfgDouble("lag-tick-threshold-ms", 100)),
+                Math.max(1, cfgInt("lag-recovery-ticks", 40)),
+                cfgBool("capture-thread-stacks", true),
+                Math.max(50, cfgInt("thread-stack-sample-interval-ms", 100)),
+                Math.max(4, Math.min(16, cfgInt("thread-stack-depth", 8))),
+                cfgBool("integrate-spark", true),
                 cfgBool("record-memory", true),
                 Math.max(1, Math.min(99, cfgInt("memory-warning-percent", 90))),
                 Math.max(1, cfgInt("memory-cooldown-minutes", 5)),
@@ -135,6 +143,14 @@ public class MonitorModule extends EngineModule {
                 "percent", String.valueOf(percent));
         plugin.messages().send(sender, "monitor.online",
                 "online", String.valueOf(status.get("online")));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tick = (Map<String, Object>) status.get("tick");
+        if (tick != null) {
+            plugin.messages().send(sender, "monitor.tick",
+                    "last", String.valueOf(tick.get("lastDurationMs")),
+                    "max", String.valueOf(tick.get("maxDurationMs")),
+                    "threshold", String.valueOf(tick.get("thresholdMs")));
+        }
         plugin.messages().send(sender, "monitor.uptime",
                 "uptime", TimeUtil.duration(service.uptimeMs()));
         @SuppressWarnings("unchecked")
@@ -159,7 +175,8 @@ public class MonitorModule extends EngineModule {
                     plugin.messages().send(sender, "monitor.events-entry",
                             "time", TimeUtil.formatDate(event.timestamp()),
                             "type", event.type(),
-                            "message", event.message());
+                            "message", event.message(),
+                            "detail", eventDetail(event));
                 }
             });
         });
@@ -241,6 +258,62 @@ public class MonitorModule extends EngineModule {
         }
     }
 
+    /** 命令行只展示短摘要，完整堆栈与 Spark 指标仍通过面板 / REST API 查看。 */
+    private static String eventDetail(MonitorEvent event) {
+        Map<String, Object> data = event.data();
+        if (data == null || data.isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        addDetail(parts, data, "trigger", "触发");
+        addDetail(parts, data, "durationMs", "持续", true);
+        addDetail(parts, data, "tickDurationMs", "Tick", true);
+        addDetail(parts, data, "maxTickDurationMs", "最高Tick", true);
+        addDetail(parts, data, "minTps", "最低TPS", false);
+        Object cause = data.get("suspectedCause");
+        if (cause != null) {
+            parts.add("疑似原因 " + causeLabel(cause));
+        }
+        Object diagnosis = data.get("diagnosis");
+        if (diagnosis instanceof Map<?, ?> diagnosisMap
+                && diagnosisMap.get("evidence") instanceof List<?> evidence
+                && !evidence.isEmpty()) {
+            parts.add("证据 " + evidence.get(0));
+        }
+        addDetail(parts, data, "gcPauseMs", "GC暂停", true);
+        return String.join("，", parts);
+    }
+
+    private static String causeLabel(Object cause) {
+        return switch (String.valueOf(cause)) {
+            case "gc_pause" -> "GC 暂停";
+            case "main_thread_blocking" -> "主线程阻塞 / IO";
+            case "world_or_chunk_work" -> "世界 / 区块计算";
+            case "entity_tick_work" -> "实体 Tick";
+            case "cpu_pressure" -> "CPU 压力";
+            case "unknown" -> "暂未确定";
+            default -> String.valueOf(cause);
+        };
+    }
+
+    private static void addDetail(List<String> parts, Map<String, Object> data,
+                                  String key, String label) {
+        Object value = data.get(key);
+        if (value != null) {
+            parts.add(label + " " + value);
+        }
+    }
+
+    private static void addDetail(List<String> parts, Map<String, Object> data,
+                                  String key, String label, boolean milliseconds) {
+        Object value = data.get(key);
+        if (!(value instanceof Number number)) {
+            return;
+        }
+        parts.add(label + " " + String.format("%.1f", number.doubleValue())
+                + (milliseconds ? "ms" : ""));
+    }
+
     // ------------------------------------------------------------------ 事件监听
     //
     // 只维护在线人数计数（采样需要），不记录进出服事件——自动事件仅限性能相关，
@@ -256,6 +329,16 @@ public class MonitorModule extends EngineModule {
         @EventHandler(priority = EventPriority.MONITOR)
         public void onQuit(PlayerQuitEvent event) {
             service.playerLeft();
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        public void onTickStart(ServerTickStartEvent event) {
+            service.tickStarted(event.getTickNumber());
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        public void onTickEnd(ServerTickEndEvent event) {
+            service.tickEnded(event.getTickNumber(), event.getTickDuration());
         }
     }
 }
