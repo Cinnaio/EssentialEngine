@@ -194,6 +194,12 @@ public class EssentialsEndpoint {
         map.put("lastSeen", data.getLastSeen());
         map.put("playtimeMs", data.getTotalPlaytime());
         map.put("homes", new ArrayList<>(data.getHomeNames()));
+        Location lastLocation = data.getLogoutLocation();
+        if (lastLocation == null) {
+            // 兼容尚未记录退出坐标的旧档案，尽量提供已有的上一位置。
+            lastLocation = data.getLastLocation();
+        }
+        map.put("lastLocation", lastLocation == null ? null : LocationUtil.describe(lastLocation));
         map.put("online", Bukkit.getPlayer(data.getUuid()) != null);
         map.put("afk", data.isAfk());
         map.put("vanished", data.isVanished());
