@@ -9,6 +9,7 @@ import com.github.cinnaio.essentialengine.module.teleport.TeleportModule;
 import com.github.cinnaio.essentialengine.module.webapi.http.ApiResponse;
 import com.github.cinnaio.essentialengine.module.webapi.http.Router;
 import com.google.gson.JsonObject;
+import fi.iki.elonen.NanoHTTPD;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -29,14 +30,23 @@ import java.util.function.DoubleUnaryOperator;
 public class EssentialsEndpoint {
 
     private static final String MODULE = "essentials";
+    private static final String ECONOMY_REQUESTS_KEY = "essentialengine-economy-requests";
+    private static final int MAX_ECONOMY_REQUESTS = 10_000;
 
     private final EssentialEngine plugin;
+    private final Object economyRequestLock = new Object();
 
     public EssentialsEndpoint(EssentialEngine plugin) {
         this.plugin = plugin;
     }
 
     public void register(Router router) {
+        router.post("/api/essentials/economy/{name}/withdraw",
+                (session, params) -> economyMutation(session, params, false));
+
+        router.post("/api/essentials/economy/{name}/deposit",
+                (session, params) -> economyMutation(session, params, true));
+
         router.get("/api/essentials/players/{name}", (session, params) -> {
             UserData data = resolve(params.get("name"));
             return data == null
@@ -161,6 +171,128 @@ public class EssentialsEndpoint {
                     ? ApiResponse.ok(MODULE, Map.of("player", name), "消息已发送")
                     : ApiResponse.error(MODULE, "玩家不在线: " + name);
         });
+    }
+
+    /**
+     * 给外部活动系统使用的原子经济变更接口。
+     *
+     * <p>旧的通用 take 接口是管理用途：它会把余额钳制到 0，不能表达「余额不足」。
+     * 活动报名必须使用这里的 try-withdraw 语义，并通过 requestId 处理 HTTP 重试。</p>
+     */
+    private ApiResponse economyMutation(NanoHTTPD.IHTTPSession session,
+                                        Map<String, String> params,
+                                        boolean deposit) {
+        UserData data = resolve(params.get("name"));
+        if (data == null) {
+            return ApiResponse.error(MODULE, "找不到玩家: " + params.get("name"));
+        }
+
+        JsonObject json = Router.readJson(session);
+        if (!json.has("amount") || !json.has("requestId")) {
+            return ApiResponse.error(MODULE, "请求体需要 amount 与 requestId 字段");
+        }
+
+        double amount;
+        try {
+            amount = UserData.roundMoney(json.get("amount").getAsDouble());
+        } catch (RuntimeException error) {
+            return ApiResponse.error(MODULE, "amount 必须是有效数字");
+        }
+        String requestId;
+        String detail;
+        try {
+            requestId = json.get("requestId").getAsString().trim();
+            detail = json.has("detail") ? json.get("detail").getAsString().trim() : "webapi economy";
+        } catch (RuntimeException error) {
+            return ApiResponse.error(MODULE, "requestId 与 detail 必须是字符串");
+        }
+        if (!Double.isFinite(amount) || amount <= 0 || amount > 1_000_000_000_000D) {
+            return ApiResponse.error(MODULE, "amount 必须大于 0 且不超过 1000000000000");
+        }
+        if (requestId.length() < 8 || requestId.length() > 80) {
+            return ApiResponse.error(MODULE, "requestId 长度必须在 8 到 80 个字符之间");
+        }
+        if (detail.length() > 160) {
+            detail = detail.substring(0, 160);
+        }
+
+        synchronized (economyRequestLock) {
+            try {
+                Map<String, Object> previous = loadEconomyRequest(requestId);
+                if (previous != null) {
+                    if (!sameEconomyRequest(previous, data.getName(), amount, deposit)) {
+                        return ApiResponse.error(MODULE, "requestId 已被另一笔经济操作使用");
+                    }
+                    return ApiResponse.ok(MODULE, previous, "重复请求，返回已处理结果");
+                }
+
+                UserData.BalanceChange change;
+                if (deposit) {
+                    change = plugin.economy().apply(data, current -> current + amount,
+                            detail.isEmpty() ? "webapi deposit" : detail);
+                } else {
+                    change = plugin.economy().apply(data,
+                            current -> current >= amount ? current - amount : current,
+                            detail.isEmpty() ? "webapi withdraw" : detail);
+                    if (change.delta() == 0D) {
+                        return ApiResponse.error(MODULE, "余额不足");
+                    }
+                }
+
+                plugin.users().saveBlocking(data);
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("player", data.getName());
+                result.put("operation", deposit ? "deposit" : "withdraw");
+                result.put("amount", amount);
+                result.put("balance", change.after());
+                result.put("requestId", requestId);
+                saveEconomyRequest(requestId, result);
+                return ApiResponse.ok(MODULE, result, deposit ? "余额已增加" : "余额已扣除");
+            } catch (Exception error) {
+                return ApiResponse.error(MODULE, "经济操作失败: " + error.getMessage());
+            }
+        }
+    }
+
+    private Map<String, Object> loadEconomyRequest(String requestId) throws Exception {
+        Map<String, Object> all = plugin.storage().loadGlobal(ECONOMY_REQUESTS_KEY);
+        if (all == null || !(all.get(requestId) instanceof Map<?, ?> raw)) {
+            return null;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        raw.forEach((key, value) -> result.put(String.valueOf(key), value));
+        return result;
+    }
+
+    private void saveEconomyRequest(String requestId, Map<String, Object> result) throws Exception {
+        Map<String, Object> all = plugin.storage().loadGlobal(ECONOMY_REQUESTS_KEY);
+        if (all == null) {
+            all = new LinkedHashMap<>();
+        }
+        all.put(requestId, result);
+        while (all.size() > MAX_ECONOMY_REQUESTS) {
+            all.remove(all.keySet().iterator().next());
+        }
+        plugin.storage().saveGlobal(ECONOMY_REQUESTS_KEY, all);
+    }
+
+    private boolean sameEconomyRequest(Map<String, Object> previous, String player,
+                                       double amount, boolean deposit) {
+        String operation = String.valueOf(previous.getOrDefault("operation", ""));
+        String recordedPlayer = String.valueOf(previous.getOrDefault("player", ""));
+        Object rawAmount = previous.get("amount");
+        if (!(rawAmount instanceof Number) && !(rawAmount instanceof String)) {
+            return false;
+        }
+        double recordedAmount;
+        try {
+            recordedAmount = Double.parseDouble(String.valueOf(rawAmount));
+        } catch (NumberFormatException error) {
+            return false;
+        }
+        return recordedPlayer.equalsIgnoreCase(player)
+                && operation.equals(deposit ? "deposit" : "withdraw")
+                && Double.compare(recordedAmount, amount) == 0;
     }
 
     private TeleportManager teleportManager() {
